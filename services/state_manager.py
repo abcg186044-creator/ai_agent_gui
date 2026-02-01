@@ -7,6 +7,7 @@ import json
 import os
 import datetime
 from pathlib import Path
+from typing import Optional, Dict, List, Any
 from core.constants import *
 from core.file_map import file_resolver, get_relevant_files, should_load_file
 from services.import_validator import import_error_detector, auto_import_fixer

@@ -396,17 +396,16 @@ class {Path(file_path).stem.replace('.py', '').capitalize()}:
         """コードから必要なインポートを検出"""
         imports = set()
         
-        # 型ヒントの検出
-        if 'Dict' in code:
-            imports.add('from typing import Dict')
-        if 'List' in code:
-            imports.add('from typing import List')
-        if 'Optional' in code:
-            imports.add('from typing import Optional')
-        if 'Any' in code:
-            imports.add('from typing import Any')
-        if 'Tuple' in code:
-            imports.add('from typing import Tuple')
+        # 型ヒントの検出（強化版）
+        type_hints = [
+            'Dict', 'List', 'Optional', 'Any', 'Tuple', 'Union', 'Callable',
+            'Iterator', 'Generator', 'Type', 'NoReturn', 'Literal',
+            'Final', 'ClassVar', 'cast', 'overload', 'TypeVar', 'Generic'
+        ]
+        
+        for type_hint in type_hints:
+            if type_hint in code:
+                imports.add(f'from typing import {type_hint}')
         
         # 一般的なライブラリの検出
         if 'datetime' in code and 'from datetime' not in code:
@@ -417,6 +416,10 @@ class {Path(file_path).stem.replace('.py', '').capitalize()}:
             imports.add('import json')
         if 're' in code and 'import re' not in code:
             imports.add('import re')
+        if 'os' in code and 'import os' not in code:
+            imports.add('import os')
+        if 'sys' in code and 'import sys' not in code:
+            imports.add('import sys')
         
         return imports
     
@@ -1058,10 +1061,16 @@ def render_secret_fortune_telling():
 必ずルートディレクトリからの絶対パス（例: from core.xxx）を使用せよ。
 これに違反するとシステムが起動しなくなる。
 
+[型ヒント自動追加命令]
+型ヒント（Optional, Dict, List, Any, Tuple, Unionなど）を使用する場合は、
+必ず `from typing import ...` を自動的に追加すること。
+型ヒントを使用しない場合でも、コード品質のためにtypingモジュールのインポートを推奨。
+
 ✅ 許可されるインポート形式:
 - from core.module import function_name
 - from ui.module import function_name  
 - from services.module import function_name
+- from typing import Optional, Dict, List, Any, Tuple, Union
 - import module
 
 ❌ 禁止されるインポート形式:
@@ -1080,7 +1089,8 @@ def render_secret_fortune_telling():
 ユーザー要求: {user_request}
 
 [生成指示]
-上記載の絶対パスルールを厳守って、{target_module} の機能を修正するコードを生成してください。
+上記載の絶対パスルールと型ヒント自動追加命令を厳守って、
+{target_module} の機能を修正するコードを生成してください。
 """
         
         return system_prompt
