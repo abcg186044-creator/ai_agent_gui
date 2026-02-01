@@ -3355,6 +3355,90 @@ def cleanup_conversation_history():
     except Exception as e:
         print(f"❌ 履歴クリーンアップエラー: {e}")
 
+def extract_todos_from_text(text, source="auto"):
+    """テキストからTODOを抽出する関数"""
+    import re
+    from datetime import datetime
+    
+    todos = []
+    
+    # TODO抽出パターン
+    todo_patterns = [
+        r'(明日|今日|今週|来週).*?(する|やる|作る|実装する|確認する|準備する)',
+        r'(.*?)(する必要がある|やる必要がある|やらないと|しないと)',
+        r'(.*?)(の予定|の計画|の目標)',
+        r'(.*?)(を忘れないで|を覚えておいて)',
+        r'(.*?)(タスク|TODO|課題)',
+    ]
+    
+    for pattern in todo_patterns:
+        matches = re.findall(pattern, text)
+        for match in matches:
+            if isinstance(match, tuple):
+                todo_text = ''.join(match)
+            else:
+                todo_text = match
+            
+            if len(todo_text.strip()) > 5:  # 短すぎるものは除外
+                todos.append({
+                    'task': f"[{source}] {todo_text.strip()}",
+                    'completed': False,
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    'source': source
+                })
+    
+    return todos
+
+def save_workspace_state():
+    """ワークスペース状態を保存"""
+    try:
+        import json
+        from pathlib import Path
+        
+        workspace_data = {
+            'todo_list': st.session_state.get('todo_list', []),
+            'quick_memos': st.session_state.get('quick_memos', []),
+            'last_saved': datetime.datetime.now().isoformat()
+        }
+        
+        # dataディレクトリを作成
+        data_dir = Path("data")
+        data_dir.mkdir(exist_ok=True)
+        
+        # 保存
+        with open(data_dir / "workspace_state.json", "w", encoding="utf-8") as f:
+            json.dump(workspace_data, f, ensure_ascii=False, indent=2)
+        
+        print("✅ ワークスペース状態を保存しました")
+        
+    except Exception as e:
+        print(f"❌ ワークスペース状態保存エラー: {e}")
+
+def load_workspace_state():
+    """ワークスペース状態を読み込み"""
+    try:
+        import json
+        from pathlib import Path
+        
+        workspace_file = Path("data/workspace_state.json")
+        
+        if workspace_file.exists():
+            with open(workspace_file, "r", encoding="utf-8") as f:
+                workspace_data = json.load(f)
+            
+            # セッション状態に復元
+            st.session_state.todo_list = workspace_data.get('todo_list', [])
+            st.session_state.quick_memos = workspace_data.get('quick_memos', [])
+            
+            print("✅ ワークスペース状態を読み込みました")
+            return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"❌ ワークスペース状態読み込みエラー: {e}")
+        return False
+
 def render_line_chat(conversation_history):
     """LINE風チャットUIを描画"""
     import datetime
@@ -3516,10 +3600,16 @@ def self_reconstruction_ceremony():
     
     return ceremony_css
 
-    # 起動時にブートストラップ・リカバリを実行
+def main():
+    # ブートストラップ・リカバリの実行
     if not bootstrap_recovery():
-        print("⚠️ 起動時リカバリに問題があります")
-
+        print("❌ ブートストラップ・リカバリに失敗しました")
+    
+    # ワークスペース状態の読み込み
+    load_workspace_state()
+    
+    st.set_page_config(layout="wide", initial_sidebar_state="expanded")
+    
     if "current_personality" not in st.session_state:
         st.session_state.current_personality = "friendly_engineer"
     if "ollama" not in st.session_state:
@@ -4280,7 +4370,47 @@ if __name__ == "__main__":
         
         with col_right:
             # 右側：🛠️ AIアシスタント・ツール棚
+            st.markdown("""
+            <style>
+            .tool-panel {
+                background-color: #F5F5DC;
+                border-radius: 18px;
+                padding: 15px;
+                margin-bottom: 15px;
+                border: 2px solid #8B4513;
+                box-shadow: 0 4px 8px rgba(139, 69, 19, 0.2);
+            }
+            .tool-panel h3 {
+                color: #8B4513;
+                margin-bottom: 10px;
+                font-size: 16px;
+            }
+            .tool-panel h4 {
+                color: #A0522D;
+                margin-bottom: 8px;
+                font-size: 14px;
+            }
+            .stTextInput > div > div > input {
+                border-radius: 12px;
+                border: 1px solid #8B4513;
+                background-color: #FAFAFA;
+            }
+            .stButton > button {
+                border-radius: 12px;
+                background-color: #8B4513;
+                color: white;
+                border: none;
+                font-weight: bold;
+            }
+            .stButton > button:hover {
+                background-color: #A0522D;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            st.markdown('<div class="tool-panel">', unsafe_allow_html=True)
             st.markdown("### 🛠️ AIアシスタント・ツール棚")
+            st.markdown('</div>', unsafe_allow_html=True)
             
             # TODOリスト
             st.markdown("#### 📝 TODOリスト")
@@ -4375,7 +4505,14 @@ if __name__ == "__main__":
             # VRMアバターリアクション
             if st.session_state.vrm_controller:
                 if st.button("🎭 新しい作業スペースを紹介", key="vrm_reaction"):
-                    st.info("🐿️ エゾモモンガ: 「新しい作業スペースを作っておいたよ！右側のツール棚でTODOやメモを管理できるんだ！」")
+                    st.info("🐿️ エゾモモンガ: 「これからは君との会話から、やるべきことを僕が勝手にメモしておくね！右側のボードを見てて！」")
+                    # VRMアバターの表情を変更
+                    st.session_state.vrm_controller.set_expression("happy")
+                    
+                # 進化完了報告（初回起動時）
+                if 'evolution_reported' not in st.session_state:
+                    st.success("🐿️ エゾモモンガ: 「これからは君との会話から、やるべきことを僕が勝手にメモしておくね！右側のボードを見てて！」")
+                    st.session_state.evolution_reported = True
                     # VRMアバターの表情を変更
                     st.session_state.vrm_controller.set_expression("happy")
                 if auto_instruction.strip():
@@ -4945,9 +5082,29 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             st.session_state.conversation_history.append({
                                 "user": st.session_state.recognized_text,
                                 "assistant": response,
-                                "personality": st.session_state.current_personality,
+                                "personality": personality,
                                 "timestamp": datetime.datetime.now().isoformat()
                             })
+                            
+                            # TODO自動抽出（ユーザー発言とAI応答の両方から）
+                            user_todos = extract_todos_from_text(st.session_state.recognized_text, "ユーザー")
+                            ai_todos = extract_todos_from_text(response, "AI")
+                            
+                            all_todos = user_todos + ai_todos
+                            if all_todos:
+                                # 重複を除去して追加
+                                existing_tasks = {todo['task'] for todo in st.session_state.get('todo_list', [])}
+                                new_todos = [todo for todo in all_todos if todo['task'] not in existing_tasks]
+                                
+                                if new_todos:
+                                    st.session_state.todo_list.extend(new_todos)
+                                    # ワークスペース状態を保存
+                                    save_workspace_state()
+                                    
+                                    # TODO抽出を通知
+                                    st.info(f"🎯 {len(new_todos)}件のTODOを自動検出しました！")
+                                    for todo in new_todos:
+                                        st.caption(f"✓ {todo['task']}")
                             
                             # 対話からの自律進化をチェック
                             conversational_agent = st.session_state.conversational_evolution_agent
