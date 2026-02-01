@@ -365,8 +365,14 @@ class CodingFriendAgent:
                 if hasattr(st, 'session_state') and 'personalities' in st.session_state:
                     st.session_state.personalities[current_personality]['prompt'] = enhanced_prompt
                 
+                # 即時同期：st.session_state.current_promptを直接書き換え
+                st.session_state.current_prompt = enhanced_prompt
+                
+                # 進化ルールを個別にも保存して次回推論から適用
+                st.session_state.current_evolution_rules = custom_data["evolution_rules"]
+                
                 st.session_state.current_personality_prompt = enhanced_prompt
-                logger.info("進化ルールをセッション状態に即時反映")
+                logger.info("進化ルールをセッション状態に即時反映 - st.rerun()なしで次回推論から適用")
                 
                 st.rerun()
             
