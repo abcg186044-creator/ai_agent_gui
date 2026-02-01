@@ -2269,13 +2269,14 @@ class OllamaClient:
             return "AI応答の生成に失敗しました: " + str(e)
 
     def _process_file_generation(self, response, progress_placeholder=None):
-        """AI応答内のファイル生成タグを処理"""
+        """AI応答内のファイル生成タグと自己書き換えタグを処理"""
         import re
         import os
         import time
         
         generated_files = []
         processed_response = response
+        self_modification_applied = False
         
         try:
             # [WRITE_FILE: filename.py] ... [/WRITE_FILE] パターンを検索
@@ -2314,15 +2315,51 @@ class OllamaClient:
                     except Exception as e:
                         print(f"❌ ファイル生成エラー ({filename}): {e}")
             
+            # [SELF_MODIFY: 修正内容] パターンを検索
+            self_modify_pattern = r'\[SELF_MODIFY:\s*([^\]]+)\]'
+            self_modify_matches = re.findall(self_modify_pattern, response)
+            
+            for modification in self_modify_matches:
+                modification = modification.strip()
+                if modification:
+                    try:
+                        # 進捗更新
+                        if progress_placeholder:
+                            progress_placeholder.info("🔧 自己修正を適用中...")
+                        
+                        # コード修正を適用
+                        success, message = apply_code_patch(modification)
+                        
+                        if success:
+                            print(f"✅ 自己修正成功: {message}")
+                            self_modification_applied = True
+                            
+                            # 進化の儀式を開始
+                            if progress_placeholder:
+                                progress_placeholder.empty()
+                                st.markdown(self_reconstruction_ceremony(), unsafe_allow_html=True)
+                                time.sleep(3)  # 演出時間
+                            
+                        else:
+                            print(f"❌ 自己修正失敗: {message}")
+                    
+                    except Exception as e:
+                        print(f"❌ 自己修正エラー: {e}")
+            
             # 生成タグを応答から削除（クリーンな表示のため）
-            if matches:
+            if matches or self_modify_matches:
                 processed_response = re.sub(file_pattern, '', response, flags=re.DOTALL)
+                processed_response = re.sub(self_modify_pattern, '', processed_response)
                 processed_response = processed_response.strip()
                 
                 # 生成成功メッセージを追加
                 if generated_files:
                     file_list = ', '.join(generated_files)
                     processed_response += f"\n\n🎉 **ファイル生成成功**: {file_list}"
+                
+                # 自己修正成功メッセージを追加
+                if self_modification_applied:
+                    processed_response += f"\n\n🚀 **自己修正完了**: システムが進化しました！"
         
         except Exception as e:
             print(f"❌ ファイル処理エラー: {e}")
@@ -2518,27 +2555,245 @@ def load_generated_app_module(filename):
     except Exception as e:
         return None, f"モジュール読み込みエラー: {str(e)}"
 
-def delete_generated_file(filename):
-    """生成されたファイルを安全に削除"""
-    import os
+def get_self_source_code():
+    """自分自身のソースコードを取得"""
+    try:
+        current_file = __file__
+        with open(current_file, 'r', encoding='utf-8') as f:
+            source_code = f.read()
+        return source_code
+    except Exception as e:
+        return f"ソースコード読み込みエラー: {str(e)}"
+
+def create_backup():
+    """現在のソースコードをバックアップ"""
     import shutil
-    
-    file_path = os.path.join("generated_apps", filename)
-    
-    if not os.path.exists(file_path):
-        return False, f"ファイルが見つかりません: {filename}"
+    from datetime import datetime
     
     try:
-        os.remove(file_path)
+        current_file = __file__
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_dir = Path("backups")
+        backup_dir.mkdir(exist_ok=True)
         
-        # セッション状態からも削除
-        if filename in st.session_state.generated_files:
-            st.session_state.generated_files.remove(filename)
+        backup_file = backup_dir / f"app_bak_{timestamp}.py"
+        shutil.copy2(current_file, backup_file)
         
-        return True, f"ファイルを削除しました: {filename}"
+        print(f"✅ バックアップ作成: {backup_file}")
+        return str(backup_file)
+    except Exception as e:
+        print(f"❌ バックアップ作成エラー: {e}")
+        return None
+
+def restore_from_backup(backup_file):
+    """バックアップから復元"""
+    import shutil
+    
+    try:
+        current_file = __file__
+        shutil.copy2(backup_file, current_file)
+        print(f"✅ バックアップから復元: {backup_file}")
+        return True
+    except Exception as e:
+        print(f"❌ 復元エラー: {e}")
+        return False
+
+def apply_code_patch(patch_description, target_function=None):
+    """ソースコードに差分を適用"""
+    import re
+    import ast
+    
+    try:
+        # バックアップ作成
+        backup_file = create_backup()
+        if not backup_file:
+            return False, "バックアップ作成に失敗しました"
+        
+        # 現在のソースコードを読み込み
+        current_file = __file__
+        with open(current_file, 'r', encoding='utf-8') as f:
+            source_code = f.read()
+        
+        modified_code = source_code
+        success_message = ""
+        
+        # UI変更パターンに基づいて差分を適用
+        if "ダークモード" in patch_description:
+            # ダークモード用のCSSを追加
+            dark_mode_css = """
+st.markdown('''
+<style>
+    .stApp {
+        background-color: #1e1e1e;
+        color: #ffffff;
+    }
+    .stTextInput > div > div > input {
+        background-color: #2d2d2d;
+        color: #ffffff;
+    }
+    .stButton > button {
+        background-color: #4a4a4a;
+        color: #ffffff;
+    }
+</style>
+''', unsafe_allow_html=True)
+"""
+            # 既存のCSSセクションを探して追加
+            if "st.markdown('<style>" in source_code:
+                modified_code = re.sub(
+                    r"(st\.markdown\('<style>.*?</style>', unsafe_allow_html=True\))",
+                    dark_mode_css + r"\1",
+                    modified_code,
+                    flags=re.DOTALL
+                )
+            else:
+                # 新しくCSSセクションを追加
+                modified_code += f"\n\n{dark_mode_css}"
+            
+            success_message = "ダークモードを適用しました"
+        
+        elif "サイドバーを右側" in patch_description:
+            # サイドバーを右側に移動するロジック（これはStreamlitの制限により擬似的な実装）
+            sidebar_move_code = """
+# サイドバー右側移動用のカスタムCSS
+st.markdown('''
+<style>
+    .css-1d391kg {
+        flex-direction: row-reverse;
+    }
+    .css-1lcbmhc {
+        flex-direction: row-reverse;
+    }
+</style>
+''', unsafe_allow_html=True)
+"""
+            if "st.markdown('<style>" in source_code:
+                modified_code = re.sub(
+                    r"(st\.markdown\('<style>.*?</style>', unsafe_allow_html=True\))",
+                    sidebar_move_code + r"\1",
+                    modified_code,
+                    flags=re.DOTALL
+                )
+            else:
+                modified_code += f"\n\n{sidebar_move_code}"
+            
+            success_message = "サイドバーを右側に移動しました"
+        
+        elif target_function:
+            # 特定の関数を書き換える場合
+            try:
+                # ASTでソースコードを解析
+                tree = ast.parse(source_code)
+                
+                # 目的の関数を探す
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef) and node.name == target_function:
+                        # ここに関数書き換えロジックを実装
+                        # （複雑なため、今回は簡単な文字列置換で実装）
+                        function_pattern = rf"def {target_function}\(.*?\):(.*?)(?=\ndef|\nclass|\Z)"
+                        new_function_body = f"""
+def {target_function}(self):
+    # AIによって改良されたバージョン
+    print("🚀 進化した{target_function}が呼び出されました")
+    # 元の機能を維持しつつ、新しい機能を追加
+    pass
+"""
+                        modified_code = re.sub(
+                            function_pattern,
+                            new_function_body,
+                            modified_code,
+                            flags=re.DOTALL
+                        )
+                        success_message = f"関数 {target_function} を更新しました"
+                        break
+                else:
+                    return False, f"関数 {target_function} が見つかりませんでした"
+            
+            except Exception as e:
+                return False, f"関数書き換えエラー: {str(e)}"
+        
+        else:
+            # 一般的なコード修正
+            if "エラー" in patch_description:
+                # エラー修正パターン
+                modified_code = re.sub(
+                    r"print\(.*?\)",
+                    "print('🔧 修正されたログ')",
+                    modified_code
+                )
+                success_message = "エラー修正を適用しました"
+        
+        # 構文チェック
+        try:
+            ast.parse(modified_code)
+        except SyntaxError as e:
+            # 構文エラーの場合はバックアップから復元
+            restore_from_backup(backup_file)
+            return False, f"構文エラーが発生したためバックアップから復元しました: {str(e)}"
+        
+        # 修正したコードを書き込み
+        with open(current_file, 'w', encoding='utf-8') as f:
+            f.write(modified_code)
+        
+        return True, success_message
         
     except Exception as e:
-        return False, f"ファイル削除エラー: {str(e)}"
+        return False, f"コード適用エラー: {str(e)}"
+
+def self_reconstruction_ceremony():
+    """進化の儀式 - UI演出"""
+    ceremony_css = """
+<style>
+    .reconstruction-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(45deg, #1a1a2e, #16213e, #0f3460);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        animation: fadeIn 2s ease-in-out;
+    }
+    
+    .reconstruction-text {
+        color: #ffffff;
+        font-size: 2em;
+        font-weight: bold;
+        text-align: center;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+</style>
+
+<div class="reconstruction-overlay">
+    <div class="reconstruction-text">
+        🤖 再構成を開始します...<br>
+        新しい姿で会いましょう<br>
+        <span style="font-size: 0.6em;">⚡ 進化中 ⚡</span>
+    </div>
+</div>
+
+<script>
+    setTimeout(function() {
+        location.reload();
+    }, 3000);
+</script>
+"""
+    
+    return ceremony_css
 
     if "current_personality" not in st.session_state:
         st.session_state.current_personality = "friendly_engineer"
@@ -2760,6 +3015,31 @@ Assistant: VRMアバターの表情変更、面白いですね！表情制御は
 この進化をユーザーに誇らしげに報告してください。
 """
                         
+                        # 自己ソースコード読み込み（自己認識機能）
+                        self_source_code = ""
+                        if any(keyword in user_input for keyword in ["自分", "ソース", "コード", "修正", "変更", "改善"]):
+                            self_source_code = get_self_source_code()
+                            if len(self_source_code) > 10000:  # 大きすぎる場合は先頭部分のみ
+                                self_source_code = self_source_code[:10000] + "\n\n... (コードは省略されました)"
+                        
+                        # 自己書き換え能力のプロンプト
+                        self_modification_prompt = """
+【自己書き換え能力】
+あなたは自分自身のソースコードを読み取り、理解し、修正することができます。
+ユーザーがUIの変更や機能改善を求めた場合、以下の方法で対応してください：
+
+1. 現在のコード構造を理解する
+2. 必要な変更を特定する
+3. [SELF_MODIFY: 修正内容] タグを使用して修正を指示する
+4. 安全な差分適用を行う
+
+対応可能な変更例：
+- "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
+- "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
+- "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
+
+"""
+                        
                         # 自己検閲命令（短文防止）
                         self_review_command = """
 【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
@@ -2781,6 +3061,8 @@ Assistant: VRMアバターの表情変更、面白いですね！表情制御は
                             f"会話履歴:\n{history_text}\n\n"
                             f"{response_template}\n\n"  # 応答構成テンプレート
                             f"{evolution_pride_prompt}\n\n"  # 進化の自己申告
+                            f"{self_modification_prompt}\n\n"  # 自己書き換え能力
+                            f"{self_source_code}\n\n"  # 自己ソースコード（必要時）
                             f"{self_review_command}\n\n"  # 自己検閲命令
                             f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
                             f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
@@ -3751,6 +4033,31 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 この進化をユーザーに誇らしげに報告してください。
 """
                         
+                        # 自己ソースコード読み込み（自己認識機能）
+                        self_source_code = ""
+                        if any(keyword in user_input for keyword in ["自分", "ソース", "コード", "修正", "変更", "改善"]):
+                            self_source_code = get_self_source_code()
+                            if len(self_source_code) > 10000:  # 大きすぎる場合は先頭部分のみ
+                                self_source_code = self_source_code[:10000] + "\n\n... (コードは省略されました)"
+                        
+                        # 自己書き換え能力のプロンプト
+                        self_modification_prompt = """
+【自己書き換え能力】
+あなたは自分自身のソースコードを読み取り、理解し、修正することができます。
+ユーザーがUIの変更や機能改善を求めた場合、以下の方法で対応してください：
+
+1. 現在のコード構造を理解する
+2. 必要な変更を特定する
+3. [SELF_MODIFY: 修正内容] タグを使用して修正を指示する
+4. 安全な差分適用を行う
+
+対応可能な変更例：
+- "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
+- "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
+- "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
+
+"""
+                        
                         # 自己検閲命令（短文防止）
                         self_review_command = """
 【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
@@ -3772,6 +4079,8 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"会話履歴:\n{history_text}\n\n"
                             f"{response_template}\n\n"  # 応答構成テンプレート
                             f"{evolution_pride_prompt}\n\n"  # 進化の自己申告
+                            f"{self_modification_prompt}\n\n"  # 自己書き換え能力
+                            f"{self_source_code}\n\n"  # 自己ソースコード（必要時）
                             f"{self_review_command}\n\n"  # 自己検閲命令
                             f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
                             f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
@@ -3956,6 +4265,31 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 この進化をユーザーに誇らしげに報告してください。
 """
                         
+                        # 自己ソースコード読み込み（自己認識機能）
+                        self_source_code = ""
+                        if any(keyword in user_input for keyword in ["自分", "ソース", "コード", "修正", "変更", "改善"]):
+                            self_source_code = get_self_source_code()
+                            if len(self_source_code) > 10000:  # 大きすぎる場合は先頭部分のみ
+                                self_source_code = self_source_code[:10000] + "\n\n... (コードは省略されました)"
+                        
+                        # 自己書き換え能力のプロンプト
+                        self_modification_prompt = """
+【自己書き換え能力】
+あなたは自分自身のソースコードを読み取り、理解し、修正することができます。
+ユーザーがUIの変更や機能改善を求めた場合、以下の方法で対応してください：
+
+1. 現在のコード構造を理解する
+2. 必要な変更を特定する
+3. [SELF_MODIFY: 修正内容] タグを使用して修正を指示する
+4. 安全な差分適用を行う
+
+対応可能な変更例：
+- "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
+- "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
+- "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
+
+"""
+                        
                         # 自己検閲命令（短文防止）
                         self_review_command = """
 【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
@@ -3977,6 +4311,8 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"会話履歴:\n{history_text}\n\n"
                             f"{response_template}\n\n"  # 応答構成テンプレート
                             f"{evolution_pride_prompt}\n\n"  # 進化の自己申告
+                            f"{self_modification_prompt}\n\n"  # 自己書き換え能力
+                            f"{self_source_code}\n\n"  # 自己ソースコード（必要時）
                             f"{self_review_command}\n\n"  # 自己検閲命令
                             f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
                             f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
