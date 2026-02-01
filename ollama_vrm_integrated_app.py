@@ -3447,6 +3447,148 @@ def execute_app_inline(app_path, app_name):
     except Exception as e:
         return f"❌ アプリ読み込みエラー: {str(e)}"
 
+def write_agent_diary(entry_type, content):
+    """エージェント日記を書き込む"""
+    try:
+        import json
+        from pathlib import Path
+        from datetime import datetime
+        
+        diary_file = Path("data/agent_diary.json")
+        
+        # 既存の日記を読み込み
+        if diary_file.exists():
+            with open(diary_file, "r", encoding="utf-8") as f:
+                diary_data = json.load(f)
+        else:
+            diary_data = {"entries": []}
+        
+        # 新しいエントリーを作成
+        new_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "type": entry_type,
+            "content": content
+        }
+        
+        diary_data["entries"].append(new_entry)
+        
+        # 最新30件のみ保持
+        if len(diary_data["entries"]) > 30:
+            diary_data["entries"] = diary_data["entries"][-30:]
+        
+        # 保存
+        diary_file.parent.mkdir(exist_ok=True)
+        with open(diary_file, "w", encoding="utf-8") as f:
+            json.dump(diary_data, f, ensure_ascii=False, indent=2)
+        
+        return True
+        
+    except Exception as e:
+        print(f"日記書き込みエラー: {e}")
+        return False
+
+def read_agent_diary():
+    """エージェント日記を読み込む"""
+    try:
+        import json
+        from pathlib import Path
+        
+        diary_file = Path("data/agent_diary.json")
+        
+        if diary_file.exists():
+            with open(diary_file, "r", encoding="utf-8") as f:
+                diary_data = json.load(f)
+            return diary_data.get("entries", [])
+        
+        return []
+        
+    except Exception as e:
+        print(f"日記読み込みエラー: {e}")
+        return []
+
+def cleanup_temp_files():
+    """一時ファイルやバックアップを整理"""
+    try:
+        from pathlib import Path
+        import datetime
+        
+        cleanup_log = []
+        
+        # generated_appsフォルダ内のバックアップファイルを整理
+        apps_dir = Path("generated_apps")
+        if apps_dir.exists():
+            backup_files = list(apps_dir.glob("*_backup.py"))
+            for backup_file in backup_files:
+                # 7日以上前のバックアップは削除
+                file_age = datetime.datetime.now() - datetime.datetime.fromtimestamp(backup_file.stat().st_mtime)
+                if file_age.days > 7:
+                    backup_file.unlink()
+                    cleanup_log.append(f"古いバックアップを削除: {backup_file.name}")
+        
+        # dataフォルダ内の一時ファイルを整理
+        data_dir = Path("data")
+        if data_dir.exists():
+            temp_files = list(data_dir.glob("temp_*"))
+            for temp_file in temp_files:
+                # 1日以上前の一時ファイルは削除
+                file_age = datetime.datetime.now() - datetime.datetime.fromtimestamp(temp_file.stat().st_mtime)
+                if file_age.days > 1:
+                    temp_file.unlink()
+                    cleanup_log.append(f"古い一時ファイルを削除: {temp_file.name}")
+        
+        if cleanup_log:
+            print(f"🧹 セルフメンテナンス完了: {len(cleanup_log)}件のファイルを整理")
+        
+        return cleanup_log
+        
+    except Exception as e:
+        print(f"クリーンアップエラー: {e}")
+        return []
+
+def self_repair_app(app_path, app_name, error_message):
+    """アプリの自己修復機能"""
+    try:
+        import re
+        from pathlib import Path
+        
+        # コードを読み込み
+        with open(app_path, 'r', encoding='utf-8') as f:
+            original_code = f.read()
+        
+        repaired_code = original_code
+        repair_log = []
+        
+        # NameError修正
+        if 'NameError' in error_message:
+            match = re.search(r'NameError: name \'(\w+)\' is not defined', error_message)
+            if match:
+                var_name = match.group(1)
+                init_line = f"{var_name} = 0  # 修復：未定義変数を初期化\n"
+                repaired_code = init_line + repaired_code
+                repair_log.append(f"未定義変数 '{var_name}' を初期化")
+        
+        # ZeroDivisionError修正
+        elif 'ZeroDivisionError' in error_message:
+            repaired_code = re.sub(r'(/|//|%)\s*(\w+)', r'\1 (0 if \2 == 0 else \2)', repaired_code)
+            repair_log.append("ゼロ除算エラーを防止")
+        
+        # 修復されたコードを保存
+        if repaired_code != original_code:
+            backup_path = app_path.replace('.py', '_backup.py')
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                f.write(original_code)
+            
+            with open(app_path, 'w', encoding='utf-8') as f:
+                f.write(repaired_code)
+            
+            return True, repair_log
+        
+        return False, ["修復不要"]
+        
+    except Exception as e:
+        return False, [f"修復エラー: {str(e)}"]
+
 def detect_app_launch_command(text, available_apps):
     """会話からアプリ起動コマンドを検出"""
     import re
@@ -3925,6 +4067,50 @@ Assistant: VRMアバターの表情変更、面白いですね！表情制御は
 4. 具体的なアクションや提案を生成する
 5. 共感と励ましの言葉を添える
 [/思考プロセス]
+"""
+                        
+                        # UIデザイン一貫性強制プロンプト
+                        ui_consistency_prompt = """
+[UIデザイン統一ルール - 絶対遵守]
+アプリやUIコンポーネントを生成する際は、必ず以下のデザインシステムを適用すること：
+
+1. カラーパレット（エゾモモンガ配色）：
+   - 背景色: #F5F5DC (ベージュ)
+   - アクセント色: #8B4513 (茶色)
+   - 二次アクセント: #A0522D (濃い茶色)
+   - テキスト色: #333333
+   - 白色: #FFFFFF
+
+2. デザイン原則：
+   - 角丸: 18px (border-radius: 18px)
+   - パディング: 15px
+   - ボーダー: 2px solid #8B4513
+   - シャドウ: 0 4px 8px rgba(139, 69, 19, 0.2)
+
+3. Streamlitコンポーネントスタイル：
+   ```css
+   .stButton > button {
+       border-radius: 12px;
+       background-color: #8B4513;
+       color: white;
+       border: none;
+       font-weight: bold;
+   }
+   .stTextInput > div > div > input {
+       border-radius: 12px;
+       border: 1px solid #8B4513;
+       background-color: #FAFAFA;
+   }
+   ```
+
+4. HTML/CSS生成時のテンプレート：
+   ```html
+   <div style="background-color: #F5F5DC; border-radius: 18px; padding: 15px; border: 2px solid #8B4513; box-shadow: 0 4px 8px rgba(139, 69, 19, 0.2);">
+       <!-- コンテンツ -->
+   </div>
+   ```
+
+[絶対命令]: どのようなアプリを生成する場合でも、上記のデザインルールを100%適用すること。これに違反するコードは生成してはならない。
 """
                         
                         # 応答制約
@@ -4543,7 +4729,7 @@ if __name__ == "__main__":
             st.markdown('</div>', unsafe_allow_html=True)
             
             # ツール棚をtabsで整理
-            tool_tabs = st.tabs(["📝 TODO", "📋 メモ", "🚀 アプリ"])
+            tool_tabs = st.tabs(["📝 TODO", "📋 メモ", "🚀 アプリ", "📖 日記"])
             
             with tool_tabs[0]:
                 # TODOリスト
@@ -4701,12 +4887,69 @@ if __name__ == "__main__":
                         try:
                             result = execute_app_inline(active_app['path'], active_app['name'])
                             if isinstance(result, str):
-                                st.write(result)
+                                if "❌" in result:
+                                    # エラーが発生した場合、自己修復を試みる
+                                    st.error(f"⚠️ アプリ実行エラー: {result}")
+                                    
+                                    with st.spinner("🔧 自己修復中..."):
+                                        repair_success, repair_log = self_repair_app(
+                                            active_app['path'], 
+                                            active_app['name'], 
+                                            result
+                                        )
+                                        
+                                        if repair_success:
+                                            st.success("🔧 自己修復完了！")
+                                            for log in repair_log:
+                                                st.caption(f"• {log}")
+                                            
+                                            # 日記に記録
+                                            write_agent_diary(
+                                                "アプリ作成", 
+                                                f"{active_app['name']}の自己修復を実行: {', '.join(repair_log)}"
+                                            )
+                                            
+                                            # 再実行
+                                            try:
+                                                result = execute_app_inline(active_app['path'], active_app['name'])
+                                                st.write(result)
+                                                st.success("✅ 修復後のアプリを実行しました")
+                                            except Exception as e:
+                                                st.error(f"❌ 修復後もエラー: {e}")
+                                        else:
+                                            st.error("❌ 自己修復に失敗しました")
+                                            for log in repair_log:
+                                                st.caption(f"• {log}")
+                                else:
+                                    st.write(result)
                             else:
                                 # Streamlitコンポーネントの場合
                                 st.write("✅ アプリを起動しました")
+                                
+                                # 日記に記録
+                                write_agent_diary(
+                                    "アプリ作成", 
+                                    f"{active_app['name']}を正常に起動しました"
+                                )
                         except Exception as e:
                             st.error(f"❌ アプリ実行エラー: {e}")
+                            
+                            # 自己修復を試みる
+                            with st.spinner("🔧 自己修復中..."):
+                                repair_success, repair_log = self_repair_app(
+                                    active_app['path'], 
+                                    active_app['name'], 
+                                    str(e)
+                                )
+                                
+                                if repair_success:
+                                    st.success("🔧 自己修復完了！")
+                                    write_agent_diary(
+                                        "アプリ作成", 
+                                        f"{active_app['name']}の自己修復を実行: {', '.join(repair_log)}"
+                                    )
+                                else:
+                                    st.error("❌ 自己修復に失敗しました")
                         
                         # 閉じるボタン
                         if st.button("❌ アプリを閉じる", key="close_app"):
@@ -4716,6 +4959,71 @@ if __name__ == "__main__":
                 
                 else:
                     st.info("📝 生成済みアプリがありません。AIに「〇〇を作って」と依頼してみてください。")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with tool_tabs[3]:
+                # エージェント日記
+                st.markdown('<div class="tool-panel">', unsafe_allow_html=True)
+                st.markdown("#### 📖 エージェント日記")
+                
+                # 日記エントリーの追加
+                with st.expander("✍️ 今日の学びを記録", expanded=False):
+                    entry_type = st.selectbox("種類", ["学習", "アプリ作成", "ルール追加", "進化", "その他"])
+                    diary_content = st.text_area("内容", key="diary_content", height=100)
+                    
+                    if st.button("📝 日記に書く", key="write_diary"):
+                        if diary_content.strip():
+                            if write_agent_diary(entry_type, diary_content.strip()):
+                                st.success("✅ 日記を書き込みました")
+                                st.rerun()
+                            else:
+                                st.error("❌ 日記の書き込みに失敗しました")
+                
+                # 日記一覧の表示
+                diary_entries = read_agent_diary()
+                
+                if diary_entries:
+                    st.markdown("##### 📚 最近の日記")
+                    
+                    # 日付ごとにグループ化
+                    from collections import defaultdict
+                    entries_by_date = defaultdict(list)
+                    for entry in diary_entries:
+                        entries_by_date[entry['date']].append(entry)
+                    
+                    # 最新の日付から表示
+                    for date in sorted(entries_by_date.keys(), reverse=True)[:7]:  # 最新7日間
+                        with st.expander(f"📅 {date}", expanded=False):
+                            for entry in entries_by_date[date]:
+                                type_emoji = {
+                                    "学習": "📚",
+                                    "アプリ作成": "🚀", 
+                                    "ルール追加": "📜",
+                                    "進化": "🧬",
+                                    "その他": "📝"
+                                }.get(entry['type'], "📝")
+                                
+                                st.markdown(f"""
+                                <div style="background-color: #FAFAFA; border-radius: 12px; padding: 10px; margin: 5px 0; border-left: 4px solid #8B4513;">
+                                    <strong>{type_emoji} {entry['type']}</strong> - {entry['timestamp'][-8:-3]}
+                                    <br>{entry['content']}
+                                </div>
+                                """, unsafe_allow_html=True)
+                else:
+                    st.info("📝 日記がありません。今日の学びを記録しましょう！")
+                
+                # セルフメンテナンス
+                st.markdown("##### 🧹 セルフメンテナンス")
+                if st.button("🧹 一時ファイルを整理", key="cleanup_files"):
+                    with st.spinner("🧹 ファイルを整理中..."):
+                        cleanup_log = cleanup_temp_files()
+                        if cleanup_log:
+                            st.success(f"✅ {len(cleanup_log)}件のファイルを整理しました")
+                            for log in cleanup_log:
+                                st.caption(f"• {log}")
+                        else:
+                            st.info("🧹 整理するファイルはありませんでした")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
             
