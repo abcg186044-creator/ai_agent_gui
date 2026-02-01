@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VRM Avatar</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: transparent;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            text-align: center;
+        }
+        .status-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <div id="loading">VRMモデルを読み込み中...</div>
+        <div class="status-indicator" id="status">待機中</div>
+    </div>
+
+    <!-- Three.js と VRM ライブラリ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/@pixiv/three-vrm@1.0.7/lib/three-vrm.min.js"></script>
+
+    <script>
+        // グローバル変数
+        let scene, camera, renderer, vrm, clock;
+        let currentMotion = 'idle';
+        let isSpeaking = false;
+        let blinkTimer = 0;
+        let lookAtTarget = null;
+
+        // 初期化
+        function init() {
+            // シーン設定
+            scene = new THREE.Scene();
+            scene.background = null; // 透明背景
+
+            // カメラ設定
+            const container = document.getElementById('canvas-container');
+            camera = new THREE.PerspectiveCamera(
+                45, // 視野角
+                container.clientWidth / container.clientHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(0, 1.4, 0.8); // 目線高さ
+            camera.lookAt(0, 1.4, 0);
+
+            // レンダラー設定
+            renderer = new THREE.WebGLRenderer({ 
+                alpha: true, // 透明背景
+                antialias: true 
+            });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // ライト設定
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.3);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+
+            // クロック設定
+            clock = new THREE.Clock();
+
+            // VRMモデル読み込み
+            loadVRM();
+
+            // イベントリスナー
+            window.addEventListener('resize', onWindowResize, false);
+
+            // Streamlitからのメッセージ受信
+            window.addEventListener('message', receiveMessage);
+
+            // アニメーション開始
+            animate();
+        }
+
+        // VRMモデル読み込み
+        async function loadVRM() {
+            try {
+                // デフォルトVRMファイルパス（Streamlitから動的に変更）
+                const vrmPath = window.location.search.includes('vrm=') 
+                    ? new URLSearchParams(window.location.search).get('vrm')
+                    : 'avatar.vrm';
+
+                // GLTFLoaderでVRMを読み込み
+                const loader = new THREE.GLTFLoader();
+                
+                // VRM用のローダー拡張
+                loader.crossOrigin = 'anonymous';
+                
+                const gltf = await loader.loadAsync(vrmPath);
+                vrm = await THREE.VRM.from(gltf);
+                
+                // VRMをシーンに追加
+                scene.add(vrm.scene);
+                
+                // VRMの位置・スケール調整
+                vrm.scene.position.set(0, 0, 0);
+                vrm.scene.scale.setScalar(1);
+                
+                // 初期ポーズ
+                vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.Hips).rotation.y = Math.PI;
+                
+                // 視線ターゲット設定
+                lookAtTarget = new THREE.Object3D();
+                lookAtTarget.position.set(0, 1.4, 0.5);
+                scene.add(lookAtTarget);
+                
+                if (vrm.lookAt) {
+                    vrm.lookAt.target = lookAtTarget;
+                }
+                
+                // ローディング完了
+                document.getElementById('loading').style.display = 'none';
+                updateStatus('準備完了');
+                
+                console.log('VRM loaded successfully');
+                
+            } catch (error) {
+                console.error('VRM loading error:', error);
+                document.getElementById('loading').innerHTML = 'VRM読み込み失敗<br>ファイルを確認してください';
+                updateStatus('エラー');
+            }
+        }
+
+        // ウィンドウリサイズ対応
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // アニメーションループ
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const deltaTime = clock.getDelta();
+            
+            if (vrm) {
+                // 基本アニメーション更新
+                updateBasicAnimation(deltaTime);
+                
+                // モーション更新
+                updateMotion(deltaTime);
+                
+                // リップシンク更新
+                updateLipSync(deltaTime);
+                
+                // まばたき更新
+                updateBlink(deltaTime);
+                
+                // VRM更新
+                vrm.update(deltaTime);
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // 基本アニメーション（呼吸など）
+        function updateBasicAnimation(deltaTime) {
+            if (!vrm) return;
+            
+            // 呼吸アニメーション
+            const breathTime = clock.getElapsedTime() * 2;
+            const breathAmount = Math.sin(breathTime) * 0.02;
+            
+            const spine = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.Spine);
+            if (spine) {
+                spine.position.y = breathAmount;
+            }
+        }
+
+        // モーション更新
+        function updateMotion(deltaTime) {
+            if (!vrm) return;
+            
+            switch (currentMotion) {
+                case 'thinking':
+                    // 考えるモーション
+                    const head = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.Head);
+                    if (head) {
+                        const thinkTime = clock.getElapsedTime();
+                        head.rotation.x = Math.sin(thinkTime * 2) * 0.1;
+                        head.rotation.y = Math.sin(thinkTime * 1.5) * 0.05;
+                    }
+                    
+                    // 手を顎に
+                    const rightHand = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.RightHand);
+                    if (rightHand) {
+                        rightHand.position.set(0.1, 1.5, 0.2);
+                    }
+                    break;
+                    
+                case 'speaking':
+                    // 話すモーション
+                    const speakHead = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.Head);
+                    if (speakHead) {
+                        const speakTime = clock.getElapsedTime();
+                        speakHead.rotation.y = Math.sin(speakTime * 3) * 0.03;
+                    }
+                    break;
+                    
+                case 'working':
+                    // 作業モーション
+                    const leftHand = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.LeftHand);
+                    const rightHandWork = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.RightHand);
+                    
+                    if (leftHand && rightHandWork) {
+                        const workTime = clock.getElapsedTime();
+                        leftHand.position.x = Math.sin(workTime * 4) * 0.05;
+                        rightHandWork.position.x = -Math.sin(workTime * 4) * 0.05;
+                    }
+                    break;
+                    
+                case 'greeting':
+                    // 挨拶モーション
+                    const rightArm = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.RightUpperArm);
+                    if (rightArm) {
+                        const greetTime = clock.getElapsedTime();
+                        rightArm.rotation.z = Math.sin(greetTime * 2) * 0.3;
+                    }
+                    break;
+                    
+                case 'listening':
+                    // 聴取モーション
+                    const listenHead = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.Head);
+                    if (listenHead) {
+                        const listenTime = clock.getElapsedTime();
+                        // 少し傾いて聴く姿勢
+                        listenHead.rotation.y = Math.sin(listenTime * 0.5) * 0.1;
+                        listenHead.rotation.x = 0.05;
+                    }
+                    break;
+                    
+                case 'nodding':
+                    // 相槌モーション
+                    const nodHead = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.Head);
+                    if (nodHead) {
+                        const nodTime = clock.getElapsedTime();
+                        // うん、うんと頷く
+                        nodHead.rotation.x = Math.sin(nodTime * 4) * 0.15;
+                    }
+                    break;
+                    
+                case 'aizuchi':
+                    // リアルタイム相槌モーション
+                    const aizuchiHead = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.Head);
+                    const aizuchiNeck = vrm.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName.Neck);
+                    
+                    if (aizuchiHead && aizuchiNeck) {
+                        const aizuchiTime = clock.getElapsedTime();
+                        
+                        // 感情に応じた相槌モーション
+                        const emotion = data.emotion || 'neutral';
+                        
+                        switch(emotion) {
+                            case 'positive':
+                            case 'surprise':
+                                // 少し大きめの頷き
+                                aizuchiHead.rotation.x = Math.sin(aizuchiTime * 6) * 0.2;
+                                aizuchiNeck.rotation.x = Math.sin(aizuchiTime * 6) * 0.1;
+                                break;
+                            case 'sympathy':
+                            case 'thinking':
+                                // 小さめの頷き、少し傾ける
+                                aizuchiHead.rotation.x = Math.sin(aizuchiTime * 3) * 0.1;
+                                aizuchiHead.rotation.y = Math.sin(aizuchiTime * 2) * 0.05;
+                                break;
+                            default:
+                                // 通常の相槌
+                                aizuchiHead.rotation.x = Math.sin(aizuchiTime * 4) * 0.12;
+                        }
+                        
+                        // 表情も変更
+                        if (vrm.expression) {
+                            if (emotion === 'positive' || emotion === 'surprise') {
+                                vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Joy, 0.3);
+                            } else if (emotion === 'sympathy') {
+                                vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Sad, 0.2);
+                            }
+                        }
+                    }
+                    break;
+            }
+        }
+
+        // リップシンク更新
+        function updateLipSync(deltaTime) {
+            if (!vrm || !isSpeaking) return;
+            
+            // 口パクアニメーション
+            const lipSyncTime = clock.getElapsedTime() * 8;
+            const mouthOpenness = (Math.sin(lipSyncTime) + 1) * 0.5;
+            
+            // VRMの口のブレンドシェイプを更新
+            if (vrm.expression) {
+                vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Aa, mouthOpenness);
+                vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Oh, mouthOpenness * 0.3);
+            }
+        }
+
+        // まばたき更新
+        function updateBlink(deltaTime) {
+            if (!vrm) return;
+            
+            blinkTimer += deltaTime;
+            
+            // 3秒に1回まばたき
+            if (blinkTimer > 3) {
+                if (vrm.expression) {
+                    vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Blink, 1);
+                    setTimeout(() => {
+                        if (vrm.expression) {
+                            vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Blink, 0);
+                        }
+                    }, 150);
+                }
+                blinkTimer = 0;
+            }
+        }
+
+        // Streamlitからのメッセージ受信
+        function receiveMessage(event) {
+            const data = event.data;
+            
+            switch (data.type) {
+                case 'motion':
+                    setMotion(data.motion);
+                    break;
+                case 'speech':
+                    setSpeaking(data.speaking);
+                    break;
+                case 'emotion':
+                    setEmotion(data.emotion);
+                    break;
+                case 'load_vrm':
+                    loadNewVRM(data.vrm_path);
+                    break;
+            }
+        }
+
+        // モーション設定
+        function setMotion(motion) {
+            currentMotion = motion;
+            updateStatus(getMotionText(motion));
+        }
+
+        // 話す状態設定
+        function setSpeaking(speaking) {
+            isSpeaking = speaking;
+            updateStatus(speaking ? '話中' : getMotionText(currentMotion));
+        }
+
+        // 感情設定
+        function setEmotion(emotion) {
+            if (!vrm || !vrm.expression) return;
+            
+            // すべての表情をリセット
+            Object.values(THREE.VRMSchema.ExpressionPresetName).forEach(preset => {
+                vrm.expression.setValue(preset, 0);
+            });
+            
+            // 感情に応じた表情を設定
+            switch (emotion) {
+                case 'happy':
+                    vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Happy, 1);
+                    break;
+                case 'sad':
+                    vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Sad, 1);
+                    break;
+                case 'angry':
+                    vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Angry, 1);
+                    break;
+                case 'surprised':
+                    vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Surprised, 1);
+                    break;
+                case 'joy':
+                    vrm.expression.setValue(THREE.VRMSchema.ExpressionPresetName.Joy, 1);
+                    break;
+            }
+        }
+
+        // 新しいVRM読み込み
+        async function loadNewVRM(vrmPath) {
+            if (vrm) {
+                scene.remove(vrm.scene);
+                vrm.dispose();
+            }
+            await loadVRM();
+        }
+
+        // ステータステキスト取得
+        function getMotionText(motion) {
+            const motionTexts = {
+                'idle': '待機中',
+                'thinking': '思考中',
+                'speaking': '話中',
+                'working': '作業中',
+                'greeting': '挨拶中',
+                'listening': '聴取中',
+                'nodding': '相槌中',
+                'aizuchi': '相槌中'
+            };
+            return motionTexts[motion] || '待機中';
+        }
+
+        // ステータス更新
+        function updateStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        // 初期化実行
+        init();
+    </script>
+</body>
+</html>

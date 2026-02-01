@@ -1,0 +1,156 @@
+services:
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama.fixed
+    container_name: ai-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://0.0.0.0:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  ai-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.voice.fixed.v2
+    container_name: ai-agent-app
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3.2
+      - PYTHONUNBUFFERED=1
+      - OLLAMA_WAIT_TIMEOUT=30
+      - CHROMA_DB_PATH=/app/data/chroma
+      - MEMORY_ENABLED=true
+      - DYNAMIC_INSTALL_ENABLED=true
+      - EXTERNAL_ACCESS=true
+      - HOST_IP=host.docker.internal
+      - VOICE_ENGINE=pyttsx3
+      - TTS_ENGINE=espeak
+    volumes:
+      # 記憶データの永続化（Named Volumes）
+      - ai_chroma_data:/app/data/chroma
+      - ai_conversation_history:/app/data/conversations
+      - ai_user_settings:/app/data/settings
+      - ai_logs:/app/data/logs
+      # Pythonライブラリの永続化
+      - python_libs:/usr/local/lib/python3.10/site-packages
+      - python_cache:/root/.cache/pip
+      # 音声デバイスのマウント
+      - /dev/snd:/dev/snd
+      # アセットとスクリプト
+      - ./assets:/app/assets
+      - ./scripts:/app/scripts:ro
+      # 修正版アプリケーション
+      - ./voice_fixed_ai_agent.py:/app/voice_fixed_ai_agent.py
+      - ./scripts/dynamic_installer_fixed.py:/app/scripts/dynamic_installer_fixed.py
+    depends_on:
+      ollama:
+        condition: service_healthy
+      voicevox:
+        condition: service_healthy
+    networks:
+      - ai-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    privileged: true
+    devices:
+      - /dev/snd:/dev/snd
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://0.0.0.0:8501 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  voicevox:
+    image: voicevox/voicevox_engine:latest
+    container_name: ai-voicevox
+    restart: unless-stopped
+    ports:
+      - "50021:50021"
+    volumes:
+      - ai_voicevox_data:/app/.voicevox_engine
+    environment:
+      - VOICEVOX_DEFAULT_SPEAKER_ID=0
+      - VOICEVOX_CPU_NUM_THREADS=2
+      - VOICEVOX_OUTPUT_SAMPLING_RATE=24000
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://0.0.0.0:50021/docs || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ai_redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+# 記憶データ用のNamed Volumes
+volumes:
+  ai_chroma_data:
+    driver: local
+    name: ai_chroma_data
+  ai_conversation_history:
+    driver: local
+    name: ai_conversation_history
+  ai_user_settings:
+    driver: local
+    name: ai_user_settings
+  ai_logs:
+    driver: local
+    name: ai_logs
+  ai_voicevox_data:
+    driver: local
+    name: ai_voicevox_data
+  ai_redis_data:
+    driver: local
+    name: ai_redis_data
+  # Pythonライブラリ用のNamed Volumes
+  python_libs:
+    driver: local
+    name: python_libs
+  python_cache:
+    driver: local
+    name: python_cache
+
+networks:
+  ai-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

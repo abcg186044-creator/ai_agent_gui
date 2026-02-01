@@ -1,0 +1,97 @@
+services:
+  # Ollamaサービス - CPU版（GPUなし）
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # AIアプリケーションサービス
+  ai-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-agent-app
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3.2
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./assets:/app/assets
+      - ./logs:/app/logs
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # VOICEVOX音声合成サービス
+  voicevox:
+    image: voicevox/voicevox_engine:latest
+    container_name: ai-voicevox
+    restart: unless-stopped
+    ports:
+      - "50021:50021"
+    volumes:
+      - voicevox_data:/app/.voicevox_engine
+    environment:
+      - VOICEVOX_DEFAULT_SPEAKER_ID=0
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:50021/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Redisキャッシュサービス
+  redis:
+    image: redis:7-alpine
+    container_name: ai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - ai-network
+
+volumes:
+  ollama_data:
+    driver: local
+  voicevox_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  ai-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

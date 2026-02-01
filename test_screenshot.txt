@@ -1,0 +1,9 @@
+ERROR 500: Internal Server Error
+File: app.py, Line 42
+Traceback:
+  File "app.py", line 42, in main
+    result = process_data(data)
+TypeError: unsupported operand type(s) for +: 'dict_items' and 'list'
+
+Solution: Convert dict_items to list before adding
+Fix: list(data.items()) + extra_items

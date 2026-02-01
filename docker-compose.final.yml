@@ -1,0 +1,101 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./data/ollama:/root/.ollama
+      - ./scripts/ollama_entrypoint.sh:/app/ollama_entrypoint.sh:ro
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+      - AUTO_PULL_MODELS=false
+    entrypoint: ["/bin/bash", "/app/ollama_entrypoint.sh"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 10
+      start_period: 60s
+
+  ai-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: ai-agent-app
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3.2
+      - PYTHONUNBUFFERED=1
+      - OLLAMA_WAIT_TIMEOUT=120
+    volumes:
+      - ./assets:/app/assets
+      - ./logs:/app/logs
+      - ./data/chroma:/app/data/chroma
+      - ./data/ollama:/app/data/ollama
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8501 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  voicevox:
+    image: voicevox/voicevox_engine:latest
+    container_name: ai-voicevox
+    restart: unless-stopped
+    ports:
+      - "50021:50021"
+    volumes:
+      - ./data/voicevox:/app/.voicevox_engine
+    environment:
+      - VOICEVOX_DEFAULT_SPEAKER_ID=0
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:50021/docs || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    command: redis-server --appendonly yes
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  ai-network:
+    driver: bridge

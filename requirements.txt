@@ -1,0 +1,51 @@
+# 音声処理と機械学習
+openai-whisper
+faster-whisper
+pyaudio
+webrtcvad
+pydub
+scipy
+librosa
+soundfile
+numpy
+pyworld
+praat-parselmouth
+scikit-learn
+
+# 高度知識システム
+sentence-transformers
+faiss-cpu
+aiohttp
+beautifulsoup4
+lxml
+
+# Excel/PDF処理
+openpyxl
+PyMuPDF
+
+# ネットワーク設定
+qrcode[pil]
+
+# 既存の依存関係
+streamlit
+langchain
+langchain-community
+langchain-experimental
+openai
+anthropic
+requests
+python-dotenv
+pillow
+opencv-python
+numpy
+pandas
+matplotlib
+plotly
+tiktoken
+chromadb
+transformers
+torch
+pygame
+pyautogui
+psutil
+schedule

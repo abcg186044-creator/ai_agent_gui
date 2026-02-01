@@ -1,0 +1,9 @@
+services:
+  ai-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - REQUIREMENTS_FILE=requirements-docker-ultra-minimal.txt
+    environment:
+      - REQUIREMENTS_FILE=requirements-docker-ultra-minimal.txt

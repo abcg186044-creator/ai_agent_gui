@@ -1,0 +1,72 @@
+FROM python:3.10-slim
+
+# 基本ツールのインストール
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    pkg-config \
+    portaudio19-dev \
+    python3-dev \
+    alsa-utils \
+    libasound2-dev \
+    libportaudio2 \
+    libportaudiocpp0 \
+    espeak \
+    espeak-ng \
+    espeak-data \
+    libespeak1 \
+    libespeak-dev \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 作業ディレクトリ
+WORKDIR /app
+
+# Pythonの基本ライブラリをインストール
+RUN pip install --no-cache-dir \
+    streamlit==1.28.1 \
+    requests==2.31.0 \
+    numpy==1.24.3 \
+    torch==2.1.0 \
+    torchaudio==2.1.0 \
+    torchvision==0.16.0 \
+    faster-whisper==0.9.0 \
+    sounddevice==0.4.6 \
+    pyttsx3==2.90 \
+    redis==4.6.0 \
+    chromadb==0.4.15 \
+    sentence-transformers==2.2.2 \
+    openai==0.28.1 \
+    python-dotenv==1.0.0
+
+# 音声関連の環境変数
+ENV PYTHONUNBUFFERED=1
+ENV ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf
+ENV ALSA_PCM_CARD=0
+ENV ALSA_PCM_DEVICE=0
+
+# 音声デバイスの設定
+RUN echo "pcm.!default {" > /etc/asound.conf && \
+    echo "    type hw" >> /etc/asound.conf && \
+    echo "    card 0" >> /etc/asound.conf && \
+    echo "}" >> /etc/asound.conf && \
+    echo "" >> /etc/asound.conf && \
+    echo "ctl.!default {" >> /etc/asound.conf && \
+    echo "    type hw" >> /etc/asound.conf && \
+    echo "    card 0" >> /etc/asound.conf && \
+    echo "}" >> /etc/asound.conf
+
+# データディレクトリの作成
+RUN mkdir -p /app/data/chroma /app/data/conversations /app/data/settings /app/data/logs
+
+# ポートの公開
+EXPOSE 8501
+
+# ヘルスチェック
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8501 || exit 1
+
+# 起動コマンド
+CMD ["streamlit", "run", "voice_fixed_ai_agent.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true", "--browser.gatherUsageStats=false"]

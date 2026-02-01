@@ -1,0 +1,98 @@
+FROM python:3.10-slim
+
+# 基本ツールのインストール
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    pkg-config \
+    portaudio19-dev \
+    python3-dev \
+    python3-setuptools \
+    alsa-utils \
+    libasound2-dev \
+    libportaudio2 \
+    libportaudiocpp0 \
+    espeak \
+    espeak-ng \
+    espeak-data \
+    libespeak1 \
+    libespeak-dev \
+    ffmpeg \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libavfilter-dev \
+    libswscale-dev \
+    libswresample-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# PKG_CONFIG_PATHの設定
+ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+
+# 作業ディレクトリ
+WORKDIR /app
+
+# pipをアップグレード
+RUN pip install --upgrade pip
+
+# setuptoolsを最新版にアップグレードしてdistutils問題を解決
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# numpyとpandasの互換性を確保 - 最新の互換バージョンを使用
+RUN pip install --no-cache-dir "numpy>=1.25.0" "pandas>=2.1.0"
+
+# PyAVの互換性対応 - ビルド済みバイナリを使用
+RUN pip install --no-cache-dir "av>=12.1.0"
+
+# Pythonライブラリを段階的にインストール
+RUN pip install --no-cache-dir \
+    streamlit==1.28.1 \
+    requests==2.31.0 \
+    torch==2.1.0 \
+    torchaudio==2.1.0 \
+    torchvision==0.16.0 \
+    sounddevice==0.4.6 \
+    pyttsx3==2.90 \
+    redis==4.6.0 \
+    chromadb==0.4.15 \
+    openai==0.28.1 \
+    python-dotenv==1.0.0
+
+# sentence-transformersを別途インストール
+RUN pip install --no-cache-dir "sentence-transformers==2.2.2"
+
+# faster-whisperを別途インストール - 1.x系にアップグレード
+RUN pip install --no-cache-dir "faster-whisper>=1.0.3"
+
+# 音声関連の環境変数
+ENV PYTHONUNBUFFERED=1
+ENV ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf
+ENV ALSA_PCM_CARD=0
+ENV ALSA_PCM_DEVICE=0
+
+# 音声デバイスの設定
+RUN echo "pcm.!default {" > /etc/asound.conf && \
+    echo "    type hw" >> /etc/asound.conf && \
+    echo "    card 0" >> /etc/asound.conf && \
+    echo "}" >> /etc/asound.conf && \
+    echo "" >> /etc/asound.conf && \
+    echo "ctl.!default {" >> /etc/asound.conf && \
+    echo "    type hw" >> /etc/asound.conf && \
+    echo "    card 0" >> /etc/asound.conf && \
+    echo "}" >> /etc/asound.conf
+
+# データディレクトリの作成
+RUN mkdir -p /app/data/chroma /app/data/conversations /app/data/settings /app/data/logs
+
+# ポートの公開
+EXPOSE 8501
+
+# ヘルスチェック
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8501 || exit 1
+
+# 起動コマンド
+CMD ["streamlit", "run", "voice_fixed_ai_agent.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true", "--browser.gatherUsageStats=false"]

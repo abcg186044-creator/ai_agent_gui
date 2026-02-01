@@ -1,0 +1,24 @@
+# AI Agent System Docker Requirements - Ultra Minimal Version
+
+# Core Web Framework
+streamlit==1.29.0
+requests==2.31.0
+
+# Core AI Libraries
+torch==2.1.0
+transformers==4.35.2
+
+# Audio Processing (minimal - no av dependency)
+soundfile==0.12.1
+
+# Computer Vision
+opencv-python==4.8.1.78
+pillow==10.1.0
+
+# Data Processing
+numpy==1.24.3
+pandas==2.1.4
+
+# Utilities
+python-dotenv==1.0.0
+psutil==5.9.6

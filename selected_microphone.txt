@@ -1,0 +1,3 @@
+28
+ヘッドセット (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(ATH-CK150BT))

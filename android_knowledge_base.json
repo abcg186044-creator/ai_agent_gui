@@ -1,0 +1,264 @@
+{
+  "android_development_curriculum": {
+    "title": "Androidアプリ開発完全カリキュラム",
+    "description": "AIがAndroidアプリ開発を完全に習得するための学習データ",
+    "version": "1.0",
+    "last_updated": "2026-01-28",
+    "modules": [
+      {
+        "id": "foundation",
+        "title": "Android開発基礎",
+        "description": "Android開発の基本的な概念と環境構築",
+        "lessons": [
+          {
+            "id": "setup",
+            "title": "開発環境構築",
+            "content": {
+              "overview": "Android Studioのインストールと初期設定",
+              "steps": [
+                "Android Studioを公式サイトからダウンロード",
+                "SDK Managerで必要なSDKをインストール",
+                "仮想デバイス（AVD）を作成",
+                "新規プロジェクトを作成してHello Worldを実行"
+              ],
+              "key_concepts": [
+                "Android Studio",
+                "SDK (Software Development Kit)",
+                "AVD (Android Virtual Device)",
+                "Gradle",
+                "AndroidManifest.xml"
+              ],
+              "code_example": {
+                "language": "kotlin",
+                "file": "MainActivity.kt",
+                "content": "package com.example.helloworld\n\nimport androidx.appcompat.app.AppCompatActivity\nimport android.os.Bundle\n\nclass MainActivity : AppCompatActivity() {\n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        setContentView(R.layout.activity_main)\n    }\n}"
+              }
+            }
+          },
+          {
+            "id": "project_structure",
+            "title": "プロジェクト構造",
+            "content": {
+              "overview": "Androidプロジェクトのディレクトリ構造と役割",
+              "directories": {
+                "app/": "アプリケーションのメインコード",
+                "app/src/main/java/": "Kotlin/Javaソースコード",
+                "app/src/main/res/": "リソースファイル（画像、文字列、レイアウト）",
+                "app/src/main/res/layout/": "XMLレイアウトファイル",
+                "app/src/main/res/values/": "文字列、色、サイズなどの定義",
+                "app/build.gradle": "モジュールレベルのビルド設定",
+                "gradle/": "プロジェクトレベルのビルド設定"
+              },
+              "key_files": [
+                "AndroidManifest.xml",
+                "build.gradle",
+                "gradle.properties",
+                "proguard-rules.pro"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "kotlin_programming",
+        "title": "Kotlinプログラミング",
+        "description": "Android開発で使用するKotlin言語の基礎",
+        "lessons": [
+          {
+            "id": "kotlin_basics",
+            "title": "Kotlin基本文法",
+            "content": {
+              "overview": "Kotlinの基本的な文法と特徴",
+              "features": [
+                "変数宣言: val（不変）とvar（可変）",
+                "型推論: 型を省略可能",
+                "Null安全性: ?と!!演算子",
+                "文字列テンプレート: $変数名",
+                "関数: funキーワード",
+                "クラス: classキーワード"
+              ],
+              "code_examples": {
+                "variables": "val name: String = \"Android\"\nvar version: Int = 14\nval pi: Double = 3.14159",
+                "null_safety": "val text: String? = null\nval length = text?.length ?: 0",
+                "functions": "fun greet(name: String): String {\n    return \"Hello, $name!\"\n}",
+                "classes": "class Person(val name: String, var age: Int) {\n    fun introduce() = \"I'm $name, $age years old\"\n}"
+              }
+            }
+          },
+          {
+            "id": "kotlin_advanced",
+            "title": "Kotlin応用機能",
+            "content": {
+              "overview": "Android開発でよく使うKotlinの応用機能",
+              "features": [
+                "拡張関数: 既存クラスに機能追加",
+                "スコープ関数: let, run, with, apply, also",
+                "ラムダ式: 無名関数",
+                "コルーチン: 非同期処理",
+                "データクラス: data class",
+                "シールドクラス: sealed class"
+              ],
+              "code_examples": {
+                "extension_functions": "fun String.isEmail(): Boolean {\n    return this.contains(\"@\")\n}\n\nval isValidEmail = \"user@example.com\".isEmail()",
+                "scope_functions": "// let\nval name: String? = null\nname?.let { println(\"Name: $it\") }\n\n// apply\nval person = Person().apply {\n    name = \"Alice\"\n    age = 25\n}",
+                "coroutines": "import kotlinx.coroutines.*\n\nfun fetchData() = GlobalScope.launch {\n    val result = withContext(Dispatchers.IO) {\n        // バックグラウンド処理\n        \"Data loaded\"\n    }\n    println(result)\n}",
+                "data_class": "data class User(val id: Int, val name: String, val email: String)"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "ui_development",
+        "title": "UI開発",
+        "description": "Androidのユーザーインターフェース開発",
+        "lessons": [
+          {
+            "id": "xml_layouts",
+            "title": "XMLレイアウト",
+            "content": {
+              "overview": "XMLを使用したAndroid UIの作成方法",
+              "layouts": [
+                "LinearLayout: 縦または横に要素を配置",
+                "RelativeLayout: 相対位置で要素を配置",
+                "ConstraintLayout: 制約ベースの柔軟な配置",
+                "FrameLayout: 要素を重ねて配置",
+                "TableLayout: 表形式で配置"
+              ],
+              "code_example": {
+                "constraint_layout": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<androidx.constraintlayout.widget.ConstraintLayout\n    xmlns:android=\"http://schemas.android.com/apk/res/android\"\n    xmlns:app=\"http://schemas.android.com/apk/res-auto\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\">\n\n    <TextView\n        android:id=\"@+id/titleText\"\n        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\"\n        android:text=\"Hello Android!\"\n        android:textSize=\"24sp\"\n        app:layout_constraintTop_toTopOf=\"parent\"\n        app:layout_constraintStart_toStartOf=\"parent\"\n        app:layout_constraintEnd_toEndOf=\"parent\" />\n\n    <Button\n        android:id=\"@+id/actionButton\"\n        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\"\n        android:text=\"Click Me\"\n        app:layout_constraintTop_toBottomOf=\"@id/titleText\"\n        app:layout_constraintStart_toStartOf=\"parent\"\n        app:layout_constraintEnd_toEndOf=\"parent\"\n        android:layout_marginTop=\"16dp\" />\n\n</androidx.constraintlayout.widget.ConstraintLayout>"
+              }
+            }
+          },
+          {
+            "id": "recyclerview",
+            "title": "RecyclerView",
+            "content": {
+              "overview": "リスト表示のためのRecyclerView実装",
+              "components": [
+                "RecyclerView: リスト表示のメインコンポーネント",
+                "ViewHolder: 各アイテムのビューを保持",
+                "Adapter: データとビューの橋渡し",
+                "LayoutManager: アイテムの配置方法",
+                "ItemDecoration: アイテム間の装飾"
+              ],
+              "code_example": {
+                "adapter": "class MyAdapter(private val items: List<String>) : RecyclerView.Adapter<MyAdapter.ViewHolder>() {\n    \n    class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {\n        val textView: TextView = itemView.findViewById(R.id.itemText)\n    }\n    \n    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {\n        val view = LayoutInflater.from(parent.context)\n            .inflate(R.layout.item_layout, parent, false)\n        return ViewHolder(view)\n    }\n    \n    override fun onBindViewHolder(holder: ViewHolder, position: Int) {\n        holder.textView.text = items[position]\n    }\n    \n    override fun getItemCount() = items.size\n}"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "components",
+        "title": "Androidコンポーネント",
+        "description": "Androidの主要コンポーネントとライフサイクル",
+        "lessons": [
+          {
+            "id": "activities",
+            "title": "Activity",
+            "content": {
+              "overview": "Activityのライフサイクルと基本的な使い方",
+              "lifecycle_methods": [
+                "onCreate(): アクティビティ作成時",
+                "onStart(): アクティビティ開始時",
+                "onResume(): アクティビティが前面に表示される時",
+                "onPause(): アクティビティが背面に移る時",
+                "onStop(): アクティビティが完全に非表示になる時",
+                "onDestroy(): アクティビティ破棄時"
+              ],
+              "code_example": {
+                "activity": "class MainActivity : AppCompatActivity() {\n    private lateinit var button: Button\n    \n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        setContentView(R.layout.activity_main)\n        \n        button = findViewById(R.id.myButton)\n        button.setOnClickListener {\n            // ボタンクリック処理\n            showToast(\"Button clicked!\")\n        }\n    }\n    \n    private fun showToast(message: String) {\n        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()\n    }\n}"
+              }
+            }
+          },
+          {
+            "id": "fragments",
+            "title": "Fragment",
+            "content": {
+              "overview": "FragmentのライフサイクルとActivityとの連携",
+              "lifecycle_methods": [
+                "onAttach(): FragmentがActivityに追加される時",
+                "onCreate(): Fragmentの初期化",
+                "onCreateView(): FragmentのUIを作成",
+                "onViewCreated(): Viewが作成された後",
+                "onStart(): Fragmentが開始される時",
+                "onResume(): Fragmentが前面に表示される時",
+                "onPause(): Fragmentが背面に移る時",
+                "onStop(): Fragmentが非表示になる時",
+                "onDestroyView(): FragmentのUIが破棄される時",
+                "onDetach(): FragmentがActivityから削除される時"
+              ],
+              "code_example": {
+                "fragment": "class MyFragment : Fragment() {\n    override fun onCreateView(\n        inflater: LayoutInflater,\n        container: ViewGroup?,\n        savedInstanceState: Bundle?\n    ): View? {\n        return inflater.inflate(R.layout.fragment_my, container, false)\n    }\n    \n    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {\n        super.onViewCreated(view, savedInstanceState)\n        val button = view.findViewById<Button>(R.id.fragmentButton)\n        button.setOnClickListener {\n            // Fragment内の処理\n        }\n    }\n}"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "advanced_topics",
+        "title": "応用トピック",
+        "description": "Android開発の応用的なトピック",
+        "lessons": [
+          {
+            "id": "networking",
+            "title": "ネットワーク通信",
+            "content": {
+              "overview": "HTTP通信とAPI連携",
+              "libraries": [
+                "Retrofit: REST APIクライアント",
+                "OkHttp: HTTPクライアント",
+                "Gson/Moshi: JSONパーサ",
+                "Glide/Picasso: 画像読み込み"
+              ],
+              "code_example": {
+                "retrofit": "interface ApiService {\n    @GET(\"users\")\n    suspend fun getUsers(): List<User>\n    \n    @POST(\"users\")\n    suspend fun createUser(@Body user: User): Response<User>\n}\n\nclass UserRepository {\n    private val apiService = RetrofitClient.apiService\n    \n    suspend fun getUsers(): Result<List<User>> {\n        return try {\n            val users = apiService.getUsers()\n            Result.success(users)\n        } catch (e: Exception) {\n            Result.failure(e)\n        }\n    }\n}"
+              }
+            }
+          },
+          {
+            "id": "database",
+            "title": "データベース",
+            "content": {
+              "overview": "Roomデータベースによるローカルデータ保存",
+              "components": [
+                "Entity: データベースのテーブルに対応するクラス",
+                "DAO: データアクセスオブジェクト",
+                "Database: データベースの定義",
+                "TypeConverter: 型変換"
+              ],
+              "code_example": {
+                "room": "@Entity(tableName = \"users\")\ndata class User(\n    @PrimaryKey val id: Int,\n    val name: String,\n    val email: String\n)\n\n@Dao\ninterface UserDao {\n    @Query(\"SELECT * FROM users\")\n    suspend fun getAllUsers(): List<User>\n    \n    @Insert\n    suspend fun insertUser(user: User): Long\n    \n    @Update\n    suspend fun updateUser(user: User): Int\n    \n    @Delete\n    suspend fun deleteUser(user: User): Int\n}\n\n@Database(entities = [User::class], version = 1)\nabstract class AppDatabase : RoomDatabase() {\n    abstract fun userDao(): UserDao\n}"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "best_practices": {
+      "architecture": {
+        "mvvm": "Model-View-ViewModelアーキテクチャ",
+        "mvp": "Model-View-Presenterアーキテクチャ",
+        "mvi": "Model-View-Intentアーキテクチャ"
+      },
+      "performance": {
+        "memory_leaks": "メモリリークの防止",
+        "ui_performance": "UIパフォーマンスの最適化",
+        "battery_optimization": "バッテリー消費の最適化"
+      },
+      "security": {
+        "data_encryption": "データの暗号化",
+        "network_security": "ネットワークセキュリティ",
+        "authentication": "認証と認可"
+      }
+    },
+    "resources": {
+      "official_documentation": "https://developer.android.com/",
+      "kotlin_documentation": "https://kotlinlang.org/docs/",
+      "android_jetpack": "https://developer.android.com/jetpack",
+      "material_design": "https://material.io/design/",
+      "github_samples": "https://github.com/android/samples"
+    }
+  }
+}

@@ -1,0 +1,89 @@
+# Ollama + VRM + 音声認識 完全統合Dockerfile
+FROM nvidia/cuda:12.0-runtime-ubuntu22.04
+
+# 環境変数設定
+ENV DEBIAN_FRONTEND=noninteractive
+ENV OLLAMA_HOST=0.0.0.0
+ENV OLLAMA_PORT=11434
+ENV CUDA_VISIBLE_DEVICES=all
+ENV PATH="/opt/venv/bin:$PATH"
+
+# 基本パッケージインストール
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    python3.10 \
+    python3.10-dev \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    pkg-config \
+    portaudio19-dev \
+    ffmpeg \
+    espeak-ng \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python環境設定
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+# Ollamaインストール
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# Python仮想環境作成
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Pythonライブラリインストール
+RUN pip install --upgrade pip setuptools wheel
+
+# 音声処理ライブラリ
+RUN pip install --no-cache-dir \
+    streamlit==1.28.1 \
+    sounddevice==0.4.6 \
+    pyttsx3==2.90 \
+    numpy==1.24.3 \
+    torch==2.1.0 \
+    torchaudio==2.1.0 \
+    "faster-whisper>=1.0.3" \
+    requests==2.31.0 \
+    fastapi==0.128.0 \
+    uvicorn==0.40.0
+
+# 作業ディレクトリ
+WORKDIR /app
+
+# アプリケーションファイルコピー
+COPY browser_audio_component.py /app/browser_audio_component.py
+COPY ollama_vrm_integrated_app.py /app/ollama_vrm_integrated_app.py
+COPY fastapi_server.py /app/fastapi_server.py
+COPY static/ /app/static/
+
+# Ollamaモデルダウンロード（ビルド時に実行）
+RUN echo "Downloading llama3.1:8b model..." && \
+    ollama serve & \
+    sleep 10 && \
+    ollama pull llama3.1:8b && \
+    ollama pull llama3.2:latest && \
+    ollama pull llama3.2-vision:latest && \
+    pkill ollama
+
+# 起動スクリプト作成
+RUN echo '#!/bin/bash\n\
+echo "Starting Ollama..."\n\
+ollama serve &\n\
+sleep 5\n\
+echo "Starting FastAPI server..."\n\
+python fastapi_server.py &\n\
+sleep 3\n\
+echo "Starting Streamlit app..."\n\
+streamlit run ollama_vrm_integrated_app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false --server.enableCORS=false --server.enableXsrfProtection=false --logger.level=error --client.showErrorDetails=false\n\
+wait' > /app/start.sh && chmod +x /app/start.sh
+
+# ポート公開
+EXPOSE 8501 8000 11434
+
+# 起動コマンド
+CMD ["/app/start.sh"]

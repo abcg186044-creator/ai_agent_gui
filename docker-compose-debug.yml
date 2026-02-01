@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # メインAIエージェントシステム
+  ai-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-agent-system
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./screenshots:/app/screenshots
+      - ./static:/app/static
+    environment:
+      - PYTHONPATH=/app
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      - ollama
+      - redis
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+  # Ollama AIモデルサーバー
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-server
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - ai-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+
+  # Redisキャッシュ
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+  # スクリーンショットデバッグ専用コンテナ
+  debug-screenshots:
+    image: alpine:latest
+    container_name: debug-screenshots
+    volumes:
+      - ./screenshots:/screenshots
+      - ./data:/data
+    command: tail -f /dev/null
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+  # Nginxリバースプロキシ
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - ai-agent
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+  # Docker API用コンテナ（スクリーンショット管理）
+  docker-api:
+    image: alpine:latest
+    container_name: docker-api
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./screenshots:/screenshots
+    command: tail -f /dev/null
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  ai-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

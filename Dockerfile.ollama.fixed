@@ -1,0 +1,38 @@
+# Ollama with Preloaded Models (Fixed Version)
+FROM ollama/ollama:latest
+
+# 作業ディレクトリ
+WORKDIR /app
+
+# 必要なツールのインストール
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# スクリプトをコピー
+COPY scripts/download_models.sh /app/download_models.sh
+COPY scripts/preload_models.sh /app/preload_models.sh
+
+# スクリプトに実行権限を付与
+RUN chmod +x /app/download_models.sh
+RUN chmod +x /app/preload_models.sh
+
+# Ollamaを起動してモデルをダウンロード
+RUN /bin/bash -c "ollama serve & \
+    sleep 10 && \
+    /app/download_models.sh && \
+    pkill ollama || true"
+
+# モデルディレクトリの確認
+RUN echo "📁 Model directory contents:" && ls -la /root/.ollama/models/ || echo "No models directory yet"
+
+# エントリーポイントの設定
+ENTRYPOINT ["/app/preload_models.sh"]
+
+# ヘルスチェック
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:11434/api/tags || exit 1
+
+# ポートの公開
+EXPOSE 11434
