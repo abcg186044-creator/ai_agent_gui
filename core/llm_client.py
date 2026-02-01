@@ -1053,7 +1053,7 @@ def render_secret_fortune_telling():
         """改造コード生成（絶対パスのみ使用）"""
         # 絶対パスのみを使用するようにシステムプロンプトを生成
         system_prompt = f"""
-[重要な指示: インポートルール]
+[ABSOLUTE - 重要な指示: インポートルール]
 以下のコードを生成する際は、必ず絶対インポートを使用してください。
 
 ✅ 許可されるインポート形式:
@@ -1065,13 +1065,20 @@ def render_secret_fortune_telling():
 ❌ 禁止されるインポート形式:
 - from ..module import function_name (相対パス)
 - from ...module import function_name (相対パス)
+- from .module import function_name (相対パス)
+- from constants import * (ディレクトリ名省略)
+- from utils import * (ディレクトリ名省略)
+
+[絶対パスルール]
+このプロジェクトでは常にルートディレクトリを基準とした絶対パスでインポートを書く必要があります。
+相対パスや省略は禁止されています。
 
 [修対象]
 ターゲットモジュール: {target_module}
 ユーザー要求: {user_request}
 
 [生成指示]
-上記載のインポートルールを厳守って、{target_module} の機能を修正するコードを生成してください。
+上記載の絶対パスルールを厳守って、{target_module} の機能を修正するコードを生成してください。
 """
         
         return system_prompt
