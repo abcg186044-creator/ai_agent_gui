@@ -23,6 +23,11 @@ class VRMAvatarController:
     
     def _get_vrm_base64(self):
         """VRMファイルをbase64エンコードして返す"""
+        # アバター非表示時は処理をスキップ
+        if hasattr(st, 'session_state') and not st.session_state.get('vrm_visible', True):
+            print("🎭 アバター非表示のためVRMデータ読み込みをスキップ")
+            return None
+            
         vrm_file_path = self._find_vrm_file()
         
         if vrm_file_path:
@@ -50,6 +55,11 @@ class VRMAvatarController:
     
     def _get_vrm_binary_array(self):
         """VRMファイルをバイナリ配列として返す"""
+        # アバター非表示時は処理をスキップ
+        if hasattr(st, 'session_state') and not st.session_state.get('vrm_visible', True):
+            print("🎭 アバター非表示のためVRMバイナリ配列生成をスキップ")
+            return ""
+            
         vrm_base64 = self._get_vrm_base64()
         if not vrm_base64:
             return ""
@@ -2202,7 +2212,13 @@ class OllamaClient:
                 json={
                     "model": model,
                     "prompt": prompt,
-                    "stream": False
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.8,
+                        "top_p": 0.9,
+                        "repeat_penalty": 1.2,
+                        "num_ctx": 4096
+                    }
                 },
                 timeout=60
             )
@@ -3002,15 +3018,18 @@ if __name__ == "__main__":
                             history_text += f"User: {conv['user']}\nAssistant: {conv['assistant']}\n"
                         
                         # プロンプト構築（アバター状態に応じて調整）
+                        # システムプロンプトの冒頭に出力の最低条件をハードコード
+                        system_prompt = "あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字程度で構成してください。"
+                        
                         base_prompt = current_personality['prompt']
                         if not st.session_state.vrm_visible:
                             # アバター非表示時の対話肉付けプロンプト
-                            enhanced_prompt = base_prompt + "\n\n" + \
+                            enhanced_prompt = system_prompt + "\n\n" + base_prompt + "\n\n" + \
                                 "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。" + \
                                 "簡潔すぎる応答を避け、ユーザーの意図を汲み取った親しみやすい文章を生成してください。" + \
                                 "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。"
                         else:
-                            enhanced_prompt = base_prompt
+                            enhanced_prompt = system_prompt + "\n\n" + base_prompt
                         
                         prompt = (enhanced_prompt + "\n\n" + 
                                  "以下のユーザーの入力に対して、人格に応じて自然に応答してください。\n\n" +
@@ -3111,15 +3130,18 @@ if __name__ == "__main__":
                             history_text += f"User: {conv['user']}\nAssistant: {conv['assistant']}\n"
                         
                         # プロンプト構築（アバター状態に応じて調整）
+                        # システムプロンプトの冒頭に出力の最低条件をハードコード
+                        system_prompt = "あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字程度で構成してください。"
+                        
                         base_prompt = current_personality['prompt']
                         if not st.session_state.vrm_visible:
                             # アバター非表示時の対話肉付けプロンプト
-                            enhanced_prompt = base_prompt + "\n\n" + \
+                            enhanced_prompt = system_prompt + "\n\n" + base_prompt + "\n\n" + \
                                 "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。" + \
                                 "簡潔すぎる応答を避け、ユーザーの意図を汲み取った親しみやすい文章を生成してください。" + \
                                 "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。"
                         else:
-                            enhanced_prompt = base_prompt
+                            enhanced_prompt = system_prompt + "\n\n" + base_prompt
                         
                         prompt = (enhanced_prompt + "\n\n" + 
                                  "以下のユーザーの入力に対して、人格に応じて自然に応答してください。\n\n" +

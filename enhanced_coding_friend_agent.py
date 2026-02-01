@@ -352,6 +352,22 @@ class CodingFriendAgent:
             # 即時反映のためにStreamlitを再実行
             import streamlit as st
             if hasattr(st, 'rerun'):
+                # セッション状態の人格プロンプトを即時更新
+                if "current_personality_prompt" not in st.session_state:
+                    st.session_state.current_personality_prompt = ""
+                
+                # 進化ルールを人格プロンプトに反映
+                evolution_rules_text = "\n".join([f"- {r}" for r in custom_data["evolution_rules"]])
+                enhanced_prompt = f"あなたは自己進化するAIエージェントです。\n\n進化ルール:\n{evolution_rules_text}\n\nこれらのルールを常に守って応答してください。"
+                
+                # 現在の人格設定に進化ルールを追加
+                current_personality = st.session_state.get("current_personality", "friendly_engineer")
+                if hasattr(st, 'session_state') and 'personalities' in st.session_state:
+                    st.session_state.personalities[current_personality]['prompt'] = enhanced_prompt
+                
+                st.session_state.current_personality_prompt = enhanced_prompt
+                logger.info("進化ルールをセッション状態に即時反映")
+                
                 st.rerun()
             
         except Exception as e:
