@@ -1,0 +1,298 @@
+"""
+メインアプリケーション
+エントリーポイント（Streamlitのメインループ）
+"""
+
+import streamlit as st
+import sys
+import os
+import datetime
+from pathlib import Path
+
+# モジュールパスを追加
+sys.path.append(str(Path(__file__).parent))
+
+# 各モジュールをインポート
+from core.constants import *
+from core.llm_client import OllamaClient, SelfEvolvingAgent, ConversationalEvolutionAgent, extract_todos_from_text, detect_app_launch_command
+from core.vrm_controller import VRMAvatarController
+from ui.styles import apply_custom_css, get_ui_consistency_prompt
+from ui.components import render_line_chat, render_tool_panel, render_vrm_controls
+from services.state_manager import save_workspace_state, load_workspace_state, save_conversation_history, load_conversation_history
+from services.app_generator import MultiLanguageCodeGenerator, scan_generated_apps
+
+def initialize_session_state():
+    """セッション状態を初期化"""
+    # 基本設定
+    if SESSION_KEYS['current_personality'] not in st.session_state:
+        st.session_state[SESSION_KEYS['current_personality']] = "friendly_engineer"
+    if SESSION_KEYS['ollama'] not in st.session_state:
+        st.session_state[SESSION_KEYS['ollama']] = None
+    if SESSION_KEYS['conversation_history'] not in st.session_state:
+        st.session_state[SESSION_KEYS['conversation_history']] = []
+    
+    # VRM制御状態
+    if SESSION_KEYS['vrm_controller'] not in st.session_state:
+        st.session_state[SESSION_KEYS['vrm_controller']] = VRMAvatarController()
+    
+    # 自己進化エージェント
+    if "evolution_agent" not in st.session_state:
+        st.session_state.evolution_agent = SelfEvolvingAgent()
+    
+    if "ai_evolution_agent" not in st.session_state:
+        st.session_state.ai_evolution_agent = SelfEvolvingAgent()
+    
+    if "conversational_evolution_agent" not in st.session_state:
+        st.session_state.conversational_evolution_agent = ConversationalEvolutionAgent()
+    
+    # 多言語プログラミングサポート
+    if "code_generator" not in st.session_state:
+        st.session_state.code_generator = MultiLanguageCodeGenerator()
+    
+    # アプリ実行状態
+    if SESSION_KEYS['active_app'] not in st.session_state:
+        st.session_state[SESSION_KEYS['active_app']] = None
+    if SESSION_KEYS['show_app_inline'] not in st.session_state:
+        st.session_state[SESSION_KEYS['show_app_inline']] = False
+
+def bootstrap_recovery():
+    """ブートストラップ・リカバリ"""
+    try:
+        # 必要なディレクトリを作成
+        DATA_DIR.mkdir(exist_ok=True)
+        GENERATED_APPS_DIR.mkdir(exist_ok=True)
+        
+        # ワークスペース状態を読み込み
+        load_workspace_state()
+        
+        # 会話履歴を読み込み
+        history = load_conversation_history()
+        if history:
+            st.session_state[SESSION_KEYS['conversation_history']] = history
+        
+        return True
+    except Exception as e:
+        print(f"❌ ブートストラップ・リカバリエラー: {e}")
+        return False
+
+def main():
+    """メイン関数"""
+    # ブートストラップ・リカバリ
+    if not bootstrap_recovery():
+        print("❌ ブートストラップ・リカバリに失敗しました")
+    
+    # Streamlit設定
+    st.set_page_config(layout="wide", initial_sidebar_state="expanded")
+    
+    # セッション状態初期化
+    initialize_session_state()
+    
+    # カスタムCSS適用
+    apply_custom_css()
+    
+    # メインタイトル
+    st.title("🤖 AI Agent VRM System - モジュール版")
+    st.markdown("---")
+    
+    # メインタブ
+    tab1, tab2, tab3 = st.tabs(["💬 会話", "🛠️ 拡張機能", "📊 進捗"])
+    
+    with tab1:
+        render_conversation_tab()
+    
+    with tab2:
+        render_extension_tab()
+    
+    with tab3:
+        render_progress_tab()
+
+def render_conversation_tab():
+    """会話タブを描画"""
+    # レイアウト設定
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    
+    with col_left:
+        # VRMアバター表示
+        vrm_controller = st.session_state[SESSION_KEYS['vrm_controller']]
+        if vrm_controller.vrm_visible:
+            vrm_html = vrm_controller.get_vrm_html()
+            st.components.v1.html(vrm_html, height=400, key=f"vrm_avatar_{hash(vrm_html)}")
+        
+        # VRM制御
+        render_vrm_controls(vrm_controller)
+    
+    with col_center:
+        # チャットメインエリア
+        render_chat_interface()
+    
+    with col_right:
+        # ツール棚
+        render_tool_panel()
+
+def render_chat_interface():
+    """チャットインターフェースを描画"""
+    # 会話履歴表示
+    if st.session_state[SESSION_KEYS['conversation_history']]:
+        st.subheader("💬 会話履歴")
+        render_line_chat(st.session_state[SESSION_KEYS['conversation_history']])
+    
+    # ユーザー入力
+    st.subheader("💬 メッセージ入力")
+    
+    user_input = st.text_input("メッセージを入力...", key="user_message")
+    
+    if st.button("📤 送信", key="send_message"):
+        if user_input.strip():
+            process_user_message(user_input.strip())
+
+def process_user_message(user_input):
+    """ユーザーメッセージを処理"""
+    with st.spinner("🤖 AI応答生成中..."):
+        try:
+            # Ollamaクライアント初期化
+            if not st.session_state[SESSION_KEYS['ollama']]:
+                st.session_state[SESSION_KEYS['ollama']] = OllamaClient()
+            
+            ollama_client = st.session_state[SESSION_KEYS['ollama']]
+            
+            # UIデザイン一貫性プロンプトを取得
+            ui_prompt = get_ui_consistency_prompt()
+            
+            # プロンプト構築
+            full_prompt = f"""
+{ui_prompt}
+
+あなたは親切で優秀なAIアシスタントです。ユーザーの質問に丁寧にお答えください。
+
+ユーザー入力: {user_input}
+"""
+            
+            # 応答生成
+            response = ollama_client.generate_response(full_prompt)
+            
+            # 会話履歴に追加
+            conversation_entry = {
+                "user": user_input,
+                "assistant": response,
+                "timestamp": datetime.datetime.now().isoformat(),
+                "personality": st.session_state[SESSION_KEYS['current_personality']]
+            }
+            
+            st.session_state[SESSION_KEYS['conversation_history']].append(conversation_entry)
+            
+            # 会話履歴を保存
+            save_conversation_history(st.session_state[SESSION_KEYS['conversation_history']])
+            
+            # TODO自動抽出
+            todos = extract_todos_from_text(user_input, "ユーザー") + extract_todos_from_text(response, "AI")
+            if todos:
+                existing_tasks = {todo['task'] for todo in st.session_state.get(SESSION_KEYS['todo_list'], [])}
+                new_todos = [todo for todo in todos if todo['task'] not in existing_tasks]
+                
+                if new_todos:
+                    if SESSION_KEYS['todo_list'] not in st.session_state:
+                        st.session_state[SESSION_KEYS['todo_list']] = []
+                    st.session_state[SESSION_KEYS['todo_list']].extend(new_todos)
+                    save_workspace_state()
+                    
+                    st.info(f"🎯 {len(new_todos)}件のTODOを自動検出しました！")
+                    for todo in new_todos:
+                        st.caption(f"✓ {todo['task']}")
+            
+            # アプリ起動コマンド検出
+            available_apps = scan_generated_apps()
+            app_to_launch, launch_message = detect_app_launch_command(user_input, available_apps)
+            
+            if app_to_launch:
+                st.session_state[SESSION_KEYS['active_app']] = app_to_launch
+                st.session_state[SESSION_KEYS['show_app_inline']] = True
+                
+                st.success(f"🚀 {launch_message}！")
+                st.info(f"💡 右側のツール棚で {app_to_launch['name']} を操作できます")
+                
+                # VRMアバターの反応
+                vrm_controller = st.session_state[SESSION_KEYS['vrm_controller']]
+                vrm_controller.set_expression("happy")
+            
+            # 対話進化チェック
+            conversational_agent = st.session_state.conversational_evolution_agent
+            evolution_result = conversational_agent.check_and_evolve_automatically(st.session_state[SESSION_KEYS['conversation_history']])
+            
+            if evolution_result and evolution_result.get("success"):
+                st.success(f"🧠 対話進化成功！意識レベル: {evolution_result['new_consciousness_level']:.3f}")
+                st.info(f"進化タイプ: {evolution_result['evolution_type']}")
+            
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"❌ メッセージ処理エラー: {str(e)}")
+
+def render_extension_tab():
+    """拡張機能タブを描画"""
+    st.subheader("🛠️ 拡張機能")
+    
+    # 自動コード生成
+    st.markdown("#### 🤖 自動コード生成")
+    
+    auto_instruction = st.text_area("📝 作成したいアプリの説明", key="auto_instruction", height=100)
+    auto_filename = st.text_input("📁 ファイル名（拡張子なし）", value="generated_app", key="auto_filename")
+    
+    if st.button("🚀 コード生成", key="auto_generate_code"):
+        if auto_instruction.strip():
+            with st.spinner("🤖 コード生成中..."):
+                try:
+                    code_generator = st.session_state.code_generator
+                    code, detected_language, message = code_generator.generate_code_from_instruction(
+                        auto_instruction.strip(), 
+                        auto_filename.strip()
+                    )
+                    
+                    if code:
+                        st.success(f"✅ {message}")
+                        st.code(code, language=detected_language)
+                    else:
+                        st.error(f"❌ {message}")
+                        
+                except Exception as e:
+                    st.error(f"❌ コード生成エラー: {str(e)}")
+
+def render_progress_tab():
+    """進捗タブを描画"""
+    st.subheader("📊 進捗状況")
+    
+    # システムステータス
+    st.markdown("#### 📈 システムステータス")
+    
+    from services.state_manager import get_system_status
+    status = get_system_status()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric("ワークスペース状態", "✅" if status.get("workspace_state_exists") else "❌")
+        st.metric("会話履歴", "✅" if status.get("conversation_history_exists") else "❌")
+        st.metric("エージェント日記", "✅" if status.get("agent_diary_exists") else "❌")
+    
+    with col2:
+        st.metric("生成アプリ数", status.get("generated_apps_count", 0))
+        st.metric("データディレクトリ", "✅" if status.get("data_dir_exists") else "❌")
+        st.metric("カスタム人格", "✅" if status.get("custom_personalities_exists") else "❌")
+    
+    # 進化状況
+    st.markdown("#### 🧬 進化状況")
+    
+    evolution_agent = st.session_state.evolution_agent
+    conversational_agent = st.session_state.conversational_evolution_agent
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric("自己進化レベル", f"{evolution_agent.consciousness_level:.3f}")
+        st.metric("対話進化レベル", f"{conversational_agent.consciousness_level:.3f}")
+    
+    with col2:
+        st.metric("進化ルール数", len(evolution_agent.evolution_rules))
+        st.metric("会話履歴数", len(st.session_state[SESSION_KEYS['conversation_history']]))
+
+if __name__ == "__main__":
+    main()
