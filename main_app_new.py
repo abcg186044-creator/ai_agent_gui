@@ -100,12 +100,12 @@ def main():
             
             st.stop()
         
-        # ブートストラップ・リカバリ
-        if not bootstrap_recovery():
-            print("❌ ブートストラップ・リカバリに失敗しました")
-        
         # Streamlit設定
         st.set_page_config(layout="wide", initial_sidebar_state="expanded")
+        
+        # 強制初期化：workspace_stateの安全な取得
+        if 'workspace_state' not in st.session_state:
+            st.session_state['workspace_state'] = load_workspace_state()
         
         # セッション状態初期化
         initialize_session_state()

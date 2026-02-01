@@ -182,25 +182,88 @@ def save_workspace_state():
         print(f"❌ ワークスペース状態保存エラー: {e}")
         return False
 
-def load_workspace_state():
+def load_workspace_state() -> Dict[str, Any]:
     """ワークスペース状態を読み込み"""
     try:
-        if WORKSPACE_STATE_FILE.exists():
-            with open(WORKSPACE_STATE_FILE, "r", encoding="utf-8") as f:
+        workspace_file = DATA_DIR / "workspace_state.json"
+        
+        if workspace_file.exists():
+            with open(workspace_file, 'r', encoding='utf-8') as f:
                 workspace_data = json.load(f)
             
+            # 必要なキーが存在することを保証
+            if not isinstance(workspace_data, dict):
+                return get_default_workspace_state()
+            
+            # デフォルト構造とマージして保証
+            merged_data = merge_with_default_workspace_state(workspace_data)
+            
             # セッション状態に復元
-            st.session_state[SESSION_KEYS['todo_list']] = workspace_data.get('todo_list', [])
-            st.session_state[SESSION_KEYS['quick_memos']] = workspace_data.get('quick_memos', [])
+            st.session_state[SESSION_KEYS['todo_list']] = merged_data.get('todo_list', [])
+            st.session_state[SESSION_KEYS['quick_memos']] = merged_data.get('quick_memos', [])
             
             print("✅ ワークスペース状態を読み込みました")
-            return True
+            return merged_data
         
-        return False
+        else:
+            # ファイルが存在しない場合はデフォルト構造を返す
+            default_data = get_default_workspace_state()
+            
+            # セッション状態に初期値を設定
+            st.session_state[SESSION_KEYS['todo_list']] = default_data.get('todo_list', [])
+            st.session_state[SESSION_KEYS['quick_memos']] = default_data.get('quick_memos', [])
+            
+            print("✅ デフォルトワークスペース状態を生成しました")
+            return default_data
         
     except Exception as e:
         print(f"❌ ワークスペース状態読み込みエラー: {e}")
-        return False
+        default_data = get_default_workspace_state()
+        
+        # エラー時にもセッション状態を初期化
+        st.session_state[SESSION_KEYS['todo_list']] = default_data.get('todo_list', [])
+        st.session_state[SESSION_KEYS['quick_memos']] = default_data.get('quick_memos', [])
+        
+        return default_data
+
+def get_default_workspace_state() -> Dict[str, Any]:
+    """デフォルトのワークスペース構造を生成"""
+    return {
+        "todo_list": [],
+        "quick_memos": [],
+        "app_settings": {
+            "theme": "ezomomonga",
+            "language": "ja",
+            "auto_save": True
+        },
+        "last_updated": datetime.datetime.now().isoformat(),
+        "version": "1.0.0"
+    }
+
+def merge_with_default_workspace_state(workspace_data: Dict[str, Any]) -> Dict[str, Any]:
+    """既存のデータとデフォルト構造をマージ"""
+    default_state = get_default_workspace_state()
+    
+    # 深いマージを実行
+    merged = {}
+    
+    # トップレベルのキーをマージ
+    for key, default_value in default_state.items():
+        if key in workspace_data:
+            if isinstance(default_value, dict) and isinstance(workspace_data[key], dict):
+                # 辞書きの辞書は深くマージ
+                merged[key] = {**default_value, **workspace_data[key]}
+            else:
+                merged[key] = workspace_data[key]
+        else:
+            merged[key] = default_value
+    
+    # workspace_dataにのみ存在するキーを追加
+    for key, value in workspace_data.items():
+        if key not in default_state:
+            merged[key] = value
+    
+    return merged
 
 def save_conversation_history(conversation_history):
     """会話履歴を保存"""
@@ -218,7 +281,7 @@ def save_conversation_history(conversation_history):
         return False
 
 def load_conversation_history():
-    """会話履歴を読み込み"""
+    """会話履歴を読み込む"""
     try:
         history_file = DATA_DIR / "conversation_history.json"
         
