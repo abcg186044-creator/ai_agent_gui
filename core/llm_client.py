@@ -96,6 +96,7 @@ class SelfEvolvingAgent:
         """局所的な自己書き換えを実行"""
         try:
             from services.app_generator import partial_mutation_manager
+            from services.import_sync import import_synchronizer, module_validator
             
             # ターゲット関数を推定
             target_function = self._estimate_target_function(user_request, file_path)
@@ -118,12 +119,20 @@ class SelfEvolvingAgent:
             )
             
             if mutation_result["success"]:
+                # インポート同期を実行
+                sync_result = import_synchronizer.sync_imports_after_mutation(file_path)
+                
+                # モジュールバリデーションを実行
+                validation_result = module_validator.validate_all_modules()
+                
                 return {
                     "success": True,
                     "target_module": file_path,
                     "mutation_type": "partial",
                     "target_function": target_function,
                     "backup_path": mutation_result["backup_path"],
+                    "sync_result": sync_result,
+                    "validation_result": validation_result,
                     "message": f"{file_path} の一部を正常に改造しました"
                 }
             else:

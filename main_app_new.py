@@ -164,6 +164,36 @@ def process_user_message(user_input):
                     st.success(f"🧬 自己改造完了！")
                     st.info(f"📝 {mutation_result['target_module']} を改造しました")
                     
+                    # インポート同期結果を表示
+                    if "sync_result" in mutation_result:
+                        sync_result = mutation_result["sync_result"]
+                        if sync_result.get("modified_files"):
+                            st.info(f"🔄 {len(sync_result['modified_files'])}個のファイルでインポートを同期しました")
+                            for file in sync_result["modified_files"]:
+                                st.caption(f"• {file}")
+                        
+                        if sync_result.get("errors"):
+                            st.warning("⚠️ インポート同期でエラーが発生しました")
+                            for error in sync_result["errors"]:
+                                st.caption(f"• {error}")
+                    
+                    # モジュールバリデーション結果を表示
+                    if "validation_result" in mutation_result:
+                        validation_result = mutation_result["validation_result"]
+                        
+                        if validation_result["success"]:
+                            st.success("✅ すべてのモジュールが正常に検証されました")
+                            
+                            # バリデーション成功の場合のみ再起動
+                            st.info("🔄 アプリケーションを再起動します...")
+                            st.rerun()
+                        else:
+                            st.error("❌ モジュール検証でエラーが発生しました")
+                            st.error("再起動を中止します")
+                            
+                            for error in validation_result["errors"]:
+                                st.caption(f"• {error}")
+                    
                     if mutation_result.get("new_imports"):
                         st.info(f"📦 新しいライブラリを追加: {', '.join(mutation_result['new_imports'])}")
                     
@@ -171,7 +201,6 @@ def process_user_message(user_input):
                     vrm_controller = st.session_state[SESSION_KEYS['vrm_controller']]
                     vrm_controller.set_expression("happy")
                     
-                    st.rerun()
                     return
             
             # UIデザイン一貫性プロンプトを取得
