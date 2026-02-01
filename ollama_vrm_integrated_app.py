@@ -2660,7 +2660,141 @@ st.markdown('''
             
             success_message = "ダークモードを適用しました"
         
-        elif "LINE" in patch_description or "ライン" in patch_description:
+        elif "タスク管理" in patch_description or "ツール棚" in patch_description or "サイドパネル" in patch_description:
+            # タスク管理サイドパネル用のレイアウト変更
+            layout_replacement = '''
+        # メインコンテンツ（三分割レイアウト）
+        col_left, col_center, col_right = st.columns([1, 2, 1])
+        
+        with col_left:
+            # 左側：VRMアバター表示（非表示設定中）
+            pass
+        
+        with col_center:
+            # 中央：チャットメインエリア
+'''
+            
+            # 既存のカラム構成を置換
+            modified_code = re.sub(
+                r'# メインコンテンツ.*?col1, col2 = st\.columns\(\[2, 1\]\)',
+                layout_replacement.strip(),
+                modified_code,
+                flags=re.DOTALL
+            )
+            
+            # 右側パネルの追加
+            right_panel_code = '''
+        with col_right:
+            # 右側：🛠️ AIアシスタント・ツール棚
+            st.markdown("### 🛠️ AIアシスタント・ツール棚")
+            
+            # TODOリスト
+            st.markdown("#### 📝 TODOリスト")
+            
+            # TODOリストの初期化
+            if 'todo_list' not in st.session_state:
+                st.session_state.todo_list = []
+            
+            # 新しいTODO追加
+            new_todo = st.text_input("✏️ 新しいTODO", key="new_todo_input")
+            if st.button("➕ 追加", key="add_todo"):
+                if new_todo.strip():
+                    st.session_state.todo_list.append({
+                        'task': new_todo.strip(),
+                        'completed': False,
+                        'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    })
+                    st.success("✅ TODOを追加しました")
+                    st.rerun()
+            
+            # TODOリスト表示
+            if st.session_state.todo_list:
+                for i, todo in enumerate(st.session_state.todo_list):
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    with col1:
+                        completed = st.checkbox(todo['task'], key=f"todo_{i}", value=todo['completed'])
+                        if completed != todo['completed']:
+                            st.session_state.todo_list[i]['completed'] = completed
+                            st.rerun()
+                    with col2:
+                        if st.button("🗑️", key=f"delete_todo_{i}"):
+                            st.session_state.todo_list.pop(i)
+                            st.success("🗑️ TODOを削除しました")
+                            st.rerun()
+                    with col3:
+                        st.caption(todo['timestamp'])
+            
+            # クイックメモ
+            st.markdown("#### 📋 クイックメモ")
+            
+            # クイックメモの初期化
+            if 'quick_memos' not in st.session_state:
+                st.session_state.quick_memos = []
+            
+            # 新しいメモ追加
+            new_memo = st.text_area("📝 新しいメモ", key="new_memo_input", height=100)
+            if st.button("💾 保存", key="save_memo"):
+                if new_memo.strip():
+                    st.session_state.quick_memos.append({
+                        'content': new_memo.strip(),
+                        'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        'type': 'manual'
+                    })
+                    st.success("💾 メモを保存しました")
+                    st.rerun()
+            
+            # メモ一覧表示
+            if st.session_state.quick_memos:
+                for i, memo in enumerate(st.session_state.quick_memos[-5:]):  # 最新5件を表示
+                    with st.expander(f"📋 {memo['timestamp']} - {memo['type']}", expanded=False):
+                        st.write(memo['content'])
+                        if st.button("🗑️ 削除", key=f"delete_memo_{i}"):
+                            st.session_state.quick_memos.pop(i)
+                            st.success("🗑️ メモを削除しました")
+                            st.rerun()
+            
+            # 自動TODO検出機能
+            st.markdown("#### 🤖 自動TODO検出")
+            if st.button("🔍 会話からTODOを抽出", key="extract_todos"):
+                if st.session_state.conversation_history:
+                    # 簡単なTODO検出ロジック
+                    todos_extracted = []
+                    for conv in st.session_state.conversation_history[-5:]:  # 最新5件から検出
+                        user_text = conv.get('user', '')
+                        if '明日' in user_text or 'する' in user_text or 'やる' in user_text:
+                            todos_extracted.append(user_text)
+                    
+                    if todos_extracted:
+                        for todo in todos_extracted:
+                            st.session_state.todo_list.append({
+                                'task': f"[自動検出] {todo}",
+                                'completed': False,
+                                'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                            })
+                        st.success(f"✅ {len(todos_extracted)}件のTODOを自動検出しました")
+                        st.rerun()
+                    else:
+                        st.info("📝 検出されたTODOはありませんでした")
+                else:
+                    st.warning("⚠️ 会話履歴がありません")
+            
+            # VRMアバターリアクション
+            if st.session_state.vrm_controller:
+                if st.button("🎭 新しい作業スペースを紹介", key="vrm_reaction"):
+                    st.info("🐿️ エゾモモンガ: 「新しい作業スペースを作っておいたよ！右側のツール棚でTODOやメモを管理できるんだ！」")
+                    # VRMアバターの表情を変更
+                    st.session_state.vrm_controller.set_expression("happy")
+'''
+            
+            # 中央カラムの後に右側パネルを追加
+            modified_code = re.sub(
+                r'with col_center:.*?if st\.button\("🤖 自動コード生成", key="auto_generate_code"\):',
+                right_panel_code.strip() + '\n\n        with col_center:\n            # 中央：チャットメインエリア\n            if st.button("🤖 自動コード生成", key="auto_generate_code"):',
+                modified_code,
+                flags=re.DOTALL
+            )
+            
+            success_message = "タスク管理サイドパネルを追加しました"
             # LINE風チャットUI用のCSS
             line_chat_css = """
 st.markdown('''
@@ -3628,12 +3762,15 @@ Assistant: VRMアバターの表情変更、面白いですね！表情制御は
 - "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
 - "エゾモモンガ仕様にして" → [SELF_MODIFY: エゾモモンガ仕様の温かみのある配色に変更]
 - "LINEみたいにして" → [SELF_MODIFY: LINE風チャットUIを適用]
+- "タスク管理パネルを追加" → [SELF_MODIFY: タスク管理サイドパネルを追加]
+- "ツール棚を作って" → [SELF_MODIFY: タスク管理サイドパネルを追加]
 - "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
 - "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
 
 特別なUIテーマ：
 - エゾモモンガ仕様：背景色#F5F5DC（ベージュ）、アクセント#8B4513（茶色）
 - LINE風チャットUI：背景#7494C0、ユーザー吹き出し#85E249、AI吹き出し#FFFFFF
+- タスク管理サイドパネル：三分割レイアウト、TODOリスト、クイックメモ機能
 
 """
                         
@@ -4114,10 +4251,15 @@ if __name__ == "__main__":
         # 自動ファイル名
         auto_filename = st.text_input("📄 ファイル名（任意）", key="auto_filename", help="空欄の場合は自動生成されます")
         
-        # 自動実行ボタン
-        col1, col2 = st.columns([1, 1])
+        # メインコンテンツ（三分割レイアウト）
+        col_left, col_center, col_right = st.columns([1, 2, 1])
         
-        with col1:
+        with col_left:
+            # 左側：VRMアバター表示（非表示設定中）
+            pass
+        
+        with col_center:
+            # 中央：チャットメインエリア
             if st.button("🤖 自動コード生成", key="auto_generate_code"):
                 if auto_instruction.strip():
                     try:
@@ -4136,8 +4278,106 @@ if __name__ == "__main__":
                     except Exception as e:
                         st.error(f"❌ 自動コード生成エラー: {str(e)}")
         
-        with col2:
-            if st.button("🚀 自動ファイル作成", key="auto_create_file"):
+        with col_right:
+            # 右側：🛠️ AIアシスタント・ツール棚
+            st.markdown("### 🛠️ AIアシスタント・ツール棚")
+            
+            # TODOリスト
+            st.markdown("#### 📝 TODOリスト")
+            
+            # TODOリストの初期化
+            if 'todo_list' not in st.session_state:
+                st.session_state.todo_list = []
+            
+            # 新しいTODO追加
+            new_todo = st.text_input("✏️ 新しいTODO", key="new_todo_input")
+            if st.button("➕ 追加", key="add_todo"):
+                if new_todo.strip():
+                    st.session_state.todo_list.append({
+                        'task': new_todo.strip(),
+                        'completed': False,
+                        'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    })
+                    st.success("✅ TODOを追加しました")
+                    st.rerun()
+            
+            # TODOリスト表示
+            if st.session_state.todo_list:
+                for i, todo in enumerate(st.session_state.todo_list):
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    with col1:
+                        completed = st.checkbox(todo['task'], key=f"todo_{i}", value=todo['completed'])
+                        if completed != todo['completed']:
+                            st.session_state.todo_list[i]['completed'] = completed
+                            st.rerun()
+                    with col2:
+                        if st.button("🗑️", key=f"delete_todo_{i}"):
+                            st.session_state.todo_list.pop(i)
+                            st.success("🗑️ TODOを削除しました")
+                            st.rerun()
+                    with col3:
+                        st.caption(todo['timestamp'])
+            
+            # クイックメモ
+            st.markdown("#### 📋 クイックメモ")
+            
+            # クイックメモの初期化
+            if 'quick_memos' not in st.session_state:
+                st.session_state.quick_memos = []
+            
+            # 新しいメモ追加
+            new_memo = st.text_area("📝 新しいメモ", key="new_memo_input", height=100)
+            if st.button("💾 保存", key="save_memo"):
+                if new_memo.strip():
+                    st.session_state.quick_memos.append({
+                        'content': new_memo.strip(),
+                        'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        'type': 'manual'
+                    })
+                    st.success("💾 メモを保存しました")
+                    st.rerun()
+            
+            # メモ一覧表示
+            if st.session_state.quick_memos:
+                for i, memo in enumerate(st.session_state.quick_memos[-5:]):  # 最新5件を表示
+                    with st.expander(f"📋 {memo['timestamp']} - {memo['type']}", expanded=False):
+                        st.write(memo['content'])
+                        if st.button("🗑️ 削除", key=f"delete_memo_{i}"):
+                            st.session_state.quick_memos.pop(i)
+                            st.success("🗑️ メモを削除しました")
+                            st.rerun()
+            
+            # 自動TODO検出機能
+            st.markdown("#### 🤖 自動TODO検出")
+            if st.button("🔍 会話からTODOを抽出", key="extract_todos"):
+                if st.session_state.conversation_history:
+                    # 簡単なTODO検出ロジック
+                    todos_extracted = []
+                    for conv in st.session_state.conversation_history[-5:]:  # 最新5件から検出
+                        user_text = conv.get('user', '')
+                        if '明日' in user_text or 'する' in user_text or 'やる' in user_text:
+                            todos_extracted.append(user_text)
+                    
+                    if todos_extracted:
+                        for todo in todos_extracted:
+                            st.session_state.todo_list.append({
+                                'task': f"[自動検出] {todo}",
+                                'completed': False,
+                                'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                            })
+                        st.success(f"✅ {len(todos_extracted)}件のTODOを自動検出しました")
+                        st.rerun()
+                    else:
+                        st.info("📝 検出されたTODOはありませんでした")
+                else:
+                    st.warning("⚠️ 会話履歴がありません")
+            
+            # VRMアバターリアクション
+            if st.session_state.vrm_controller:
+                if st.button("🎭 新しい作業スペースを紹介", key="vrm_reaction"):
+                    st.info("🐿️ エゾモモンガ: 「新しい作業スペースを作っておいたよ！右側のツール棚でTODOやメモを管理できるんだ！」")
+                    # VRMアバターの表情を変更
+                    st.session_state.vrm_controller.set_expression("happy")
                 if auto_instruction.strip():
                     try:
                         file_path, detected_language, message = code_generator.create_file_from_instruction(
@@ -4652,12 +4892,15 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 - "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
 - "エゾモモンガ仕様にして" → [SELF_MODIFY: エゾモモンガ仕様の温かみのある配色に変更]
 - "LINEみたいにして" → [SELF_MODIFY: LINE風チャットUIを適用]
+- "タスク管理パネルを追加" → [SELF_MODIFY: タスク管理サイドパネルを追加]
+- "ツール棚を作って" → [SELF_MODIFY: タスク管理サイドパネルを追加]
 - "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
 - "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
 
 特別なUIテーマ：
 - エゾモモンガ仕様：背景色#F5F5DC（ベージュ）、アクセント#8B4513（茶色）
 - LINE風チャットUI：背景#7494C0、ユーザー吹き出し#85E249、AI吹き出し#FFFFFF
+- タスク管理サイドパネル：三分割レイアウト、TODOリスト、クイックメモ機能
 
 """
                         
@@ -4890,12 +5133,15 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 - "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
 - "エゾモモンガ仕様にして" → [SELF_MODIFY: エゾモモンガ仕様の温かみのある配色に変更]
 - "LINEみたいにして" → [SELF_MODIFY: LINE風チャットUIを適用]
+- "タスク管理パネルを追加" → [SELF_MODIFY: タスク管理サイドパネルを追加]
+- "ツール棚を作って" → [SELF_MODIFY: タスク管理サイドパネルを追加]
 - "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
 - "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
 
 特別なUIテーマ：
 - エゾモモンガ仕様：背景色#F5F5DC（ベージュ）、アクセント#8B4513（茶色）
 - LINE風チャットUI：背景#7494C0、ユーザー吹き出し#85E249、AI吹き出し#FFFFFF
+- タスク管理サイドパネル：三分割レイアウト、TODOリスト、クイックメモ機能
 
 """
                         
