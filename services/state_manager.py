@@ -9,7 +9,7 @@ import datetime
 from pathlib import Path
 from core.constants import *
 from core.file_map import file_resolver, get_relevant_files, should_load_file
-from .import_validator import import_error_detector, auto_import_fixer
+from services.import_validator import import_error_detector, auto_import_fixer
 
 # ファイルキャッシュ（パフォーマンス向上）
 _file_cache = {}

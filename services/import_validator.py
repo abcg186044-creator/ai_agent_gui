@@ -8,7 +8,7 @@ import ast
 import importlib
 from pathlib import Path
 from typing import Dict, List, Set, Optional, Tuple
-from ..core.constants import *
+from core.constants import *
 
 class ImportErrorDetector:
     """インポートエラー検知クラス"""
