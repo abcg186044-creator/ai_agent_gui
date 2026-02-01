@@ -357,22 +357,24 @@ class CodingFriendAgent:
                     st.session_state.current_personality_prompt = ""
                 
                 # 進化ルールを人格プロンプトに反映
-                evolution_rules_text = "\n".join([f"[MUST_OBEY_RULE]{r}[/MUST_OBEY_RULE]" for r in custom_data["evolution_rules"]])
-                enhanced_prompt = f"あなたは自己進化するAIエージェントです。\n\n[SYSTEM_RULES]\n{evolution_rules_text}\n[/SYSTEM_RULES]\n\nこれらの[MUST_OBEY_RULE]で囲まれたルールは絶対優先で遵守してください。人格設定よりも上書きされます。"
+                evolution_rules_text = "\n".join([f"[ABSOLUTE_RULE]{r}[/ABSOLUTE_RULE]" for r in custom_data["evolution_rules"]])
+                enhanced_prompt = f"あなたは自己進化するAIエージェントです。\n\n### SYSTEM COMMAND (ABSOLUTE) ###\n{evolution_rules_text}\n\n### SYSTEM CONSTRAINT ###\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\nこれらの[ABSOLUTE_RULE]で囲まれたルールは絶対優先で遵守してください。人格設定よりも上書きされます。"
                 
                 # 現在の人格設定に進化ルールを追加
                 current_personality = st.session_state.get("current_personality", "friendly_engineer")
                 if hasattr(st, 'session_state') and 'personalities' in st.session_state:
                     st.session_state.personalities[current_personality]['prompt'] = enhanced_prompt
                 
-                # 即時同期：st.session_state.current_promptを直接書き換え
+                # セッション状態の同期バグ修正 - 変数参照を一元化
                 st.session_state.current_prompt = enhanced_prompt
-                
-                # 進化ルールを個別にも保存して次回推論から適用
+                st.session_state.current_personality_prompt = enhanced_prompt
                 st.session_state.current_evolution_rules = custom_data["evolution_rules"]
                 
-                st.session_state.current_personality_prompt = enhanced_prompt
-                logger.info("進化ルールをセッション状態に即時反映 - st.rerun()なしで次回推論から適用")
+                # 即時同期用のグローバル変数も更新
+                if hasattr(st, 'session_state'):
+                    st.session_state.system_commands = f"### SYSTEM COMMAND (ABSOLUTE) ###\n{evolution_rules_text}\n\n### SYSTEM CONSTRAINT ###\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。"
+                
+                logger.info("進化ルールをセッション状態に即時同期 - 変数参照を一元化")
                 
                 st.rerun()
             

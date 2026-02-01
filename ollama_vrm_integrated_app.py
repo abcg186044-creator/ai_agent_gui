@@ -42,6 +42,7 @@ class VRMAvatarController:
                     vrm_data = f.read()
                     encoded_data = base64.b64encode(vrm_data).decode('utf-8')
                     print("✅ VRMファイルのbase64エンコード成功: " + str(len(encoded_data)) + " 文字")
+                    # Base64ログを制限（先頭50文字のみ表示）
                     print("🔍 VRMデータ先頭: " + encoded_data[:50] + "...")
                     return encoded_data
                         
@@ -83,6 +84,11 @@ class VRMAvatarController:
             array_literal = "new Uint8Array([" + ",".join(array_parts) + "])"
             
             print("✅ VRMバイナリ配列生成成功: " + str(len(binary_data)) + " バイト")
+            # ログを制限してデバッグ効率を向上
+            if len(array_literal) > 100:
+                print("🔍 配列データ: " + array_literal[:100] + "...")
+            else:
+                print("🔍 配列データ: " + array_literal)
             return array_literal
             
         except Exception as e:
@@ -3024,9 +3030,9 @@ if __name__ == "__main__":
                         for conv in conversation_history:
                             history_text += f"User: {conv['user']}\nAssistant: {conv['assistant']}\n"
                         
-                        # プロンプト階層構造の逆転実装（物理的固定）
+                        # プロンプト階層構造の厳格化（システム命令化）
                         
-                        # Layer 1 (System - 最優先): 進化ルールを人格プロンプトの外側で囲む
+                        # Layer 1 (System - 絶対命令): 進化ルールをシステム命令として配置
                         evolution_rules = []
                         try:
                             import json
@@ -3037,11 +3043,11 @@ if __name__ == "__main__":
                         except Exception as e:
                             print(f"進化ルール読み込みエラー: {e}")
                         
-                        # 進化ルールを外側で囲む（記憶の永続化）
-                        evolution_rules_wrapper = ""
+                        # システム命令セクション（最優先）
+                        system_commands = ""
                         if evolution_rules:
-                            rules_text = "\n".join([f"[MUST_OBEY_RULE]{rule}[/MUST_OBEY_RULE]" for rule in evolution_rules])
-                            evolution_rules_wrapper = f"[EVOLUTION_RULES_START]\n{rules_text}\n[EVOLUTION_RULES_END]\n\n"
+                            rules_text = "\n".join([f"[ABSOLUTE_RULE]{rule}[/ABSOLUTE_RULE]" for rule in evolution_rules])
+                            system_commands = f"### SYSTEM COMMAND (ABSOLUTE) ###\n{rules_text}\n\n### SYSTEM CONSTRAINT ###\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
                         
                         # Layer 2 (Instruction): ユーザーの直近の具体的な指示
                         user_instruction = f"[CURRENT_INSTRUCTION]\nユーザー入力: {st.session_state.recognized_text}\n[/CURRENT_INSTRUCTION]\n\n"
@@ -3075,10 +3081,15 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                         if not st.session_state.vrm_visible:
                             avatar_constraints = "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。"
                         
-                        # 最終プロンプト構築（逆転順序 - CRITICAL_RULEを最下部に配置）
+                        # 応答構成テンプレートの指定（最終強制）
+                        response_template = """
+回答構成: [ユーザーへの共感] + [ルールに基づいた挨拶] + [具体的な提案や技術的見解]
+"""
+                        
+                        # 最終プロンプト構築（システム命令化）
                         prompt = (
                             f"あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。\n\n"
-                            f"{evolution_rules_wrapper}"  # 進化ルールを外側で囲む
+                            f"{system_commands}"  # Layer 1 (絶対命令)
                             f"{base_prompt}\n\n"  # Layer 3 (Persona)
                             f"{few_shot_examples}\n\n"
                             f"{chain_of_thought}"
@@ -3086,7 +3097,8 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"{response_constraints}\n\n"
                             f"{user_instruction}"  # Layer 2 (Instruction)
                             f"会話履歴:\n{history_text}\n\n"
-                            f"[CRITICAL_RULE]: 上記の性格設定に関わらず、挨拶には挨拶を返し、ユーザーの個別ルールを絶対優先せよ。短文回答は禁止。\n\nAssistant:"  # 最下部（AIが最後に読む位置）
+                            f"{response_template}\n\n"  # 応答構成テンプレート
+                            f"Assistant:"
                         )
                         
                         # Ollamaで応答生成
@@ -3182,9 +3194,9 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                         for conv in conversation_history:
                             history_text += f"User: {conv['user']}\nAssistant: {conv['assistant']}\n"
                         
-                        # プロンプト階層構造の逆転実装（物理的固定）
+                        # プロンプト階層構造の厳格化（システム命令化）
                         
-                        # Layer 1 (System - 最優先): 進化ルールを人格プロンプトの外側で囲む
+                        # Layer 1 (System - 絶対命令): 進化ルールをシステム命令として配置
                         evolution_rules = []
                         try:
                             import json
@@ -3195,11 +3207,11 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                         except Exception as e:
                             print(f"進化ルール読み込みエラー: {e}")
                         
-                        # 進化ルールを外側で囲む（記憶の永続化）
-                        evolution_rules_wrapper = ""
+                        # システム命令セクション（最優先）
+                        system_commands = ""
                         if evolution_rules:
-                            rules_text = "\n".join([f"[MUST_OBEY_RULE]{rule}[/MUST_OBEY_RULE]" for rule in evolution_rules])
-                            evolution_rules_wrapper = f"[EVOLUTION_RULES_START]\n{rules_text}\n[EVOLUTION_RULES_END]\n\n"
+                            rules_text = "\n".join([f"[ABSOLUTE_RULE]{rule}[/ABSOLUTE_RULE]" for rule in evolution_rules])
+                            system_commands = f"### SYSTEM COMMAND (ABSOLUTE) ###\n{rules_text}\n\n### SYSTEM CONSTRAINT ###\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
                         
                         # Layer 2 (Instruction): ユーザーの直近の具体的な指示
                         user_instruction = f"[CURRENT_INSTRUCTION]\nユーザー入力: {st.session_state.recognized_text}\n[/CURRENT_INSTRUCTION]\n\n"
@@ -3233,10 +3245,15 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                         if not st.session_state.vrm_visible:
                             avatar_constraints = "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。"
                         
-                        # 最終プロンプト構築（逆転順序 - CRITICAL_RULEを最下部に配置）
+                        # 応答構成テンプレートの指定（最終強制）
+                        response_template = """
+回答構成: [ユーザーへの共感] + [ルールに基づいた挨拶] + [具体的な提案や技術的見解]
+"""
+                        
+                        # 最終プロンプト構築（システム命令化）
                         prompt = (
                             f"あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。\n\n"
-                            f"{evolution_rules_wrapper}"  # 進化ルールを外側で囲む
+                            f"{system_commands}"  # Layer 1 (絶対命令)
                             f"{base_prompt}\n\n"  # Layer 3 (Persona)
                             f"{few_shot_examples}\n\n"
                             f"{chain_of_thought}"
@@ -3244,7 +3261,8 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"{response_constraints}\n\n"
                             f"{user_instruction}"  # Layer 2 (Instruction)
                             f"会話履歴:\n{history_text}\n\n"
-                            f"[CRITICAL_RULE]: 上記の性格設定に関わらず、挨拶には挨拶を返し、ユーザーの個別ルールを絶対優先せよ。短文回答は禁止。\n\nAssistant:"  # 最下部（AIが最後に読む位置）
+                            f"{response_template}\n\n"  # 応答構成テンプレート
+                            f"Assistant:"
                         )
                         
                         # Ollamaで応答生成
