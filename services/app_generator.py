@@ -7,7 +7,7 @@ import os
 import re
 import importlib.util
 from pathlib import Path
-from ..core.constants import *
+from core.constants import *
 from .backup_manager import backup_manager
 
 class CodeExtractor:

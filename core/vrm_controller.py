@@ -5,7 +5,7 @@ VRMモデルのロードと表示、表情制御ロジックを管理
 
 import json
 import os
-from .constants import *
+from constants import *
 
 class VRMAvatarController:
     def __init__(self):

@@ -6,10 +6,10 @@ UIコンポーネントモジュール
 import streamlit as st
 import datetime
 from collections import defaultdict
-from ..core.constants import *
-from ..core.llm_client import extract_todos_from_text
-from ..services.state_manager import save_workspace_state, load_workspace_state, write_agent_diary, read_agent_diary, cleanup_temp_files
-from ..services.app_generator import scan_generated_apps, execute_app_inline, self_repair_app
+from core.constants import *
+from core.llm_client import extract_todos_from_text, detect_app_launch_command
+from services.state_manager import save_workspace_state, load_workspace_state, write_agent_diary, read_agent_diary, cleanup_temp_files
+from services.app_generator import scan_generated_apps, execute_app_inline, self_repair_app
 from .styles import get_tool_panel_style
 
 def render_line_chat(conversation_history):

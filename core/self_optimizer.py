@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Set, Optional, Tuple
-from ..core.constants import *
+from constants import *
 
 class CodeAnalyzer:
     """コード分析クラス"""

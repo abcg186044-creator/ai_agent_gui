@@ -8,9 +8,9 @@ import json
 import os
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
-from .constants import *
-from .self_mutation import ModularSelfMutationManager
-from .file_map import resolve_target_file, get_relevant_files
+from core.constants import *
+from core.self_mutation import ModularSelfMutationManager
+from core.file_map import resolve_target_file, get_relevant_files
 
 class OllamaClient:
     def __init__(self, model_name="llama2", base_url="http://localhost:11434"):
@@ -969,18 +969,31 @@ def render_secret_fortune_telling():
             return None
     
     def _generate_mutation_code(self, user_request: str, target_module: str) -> Optional[str]:
-        """改造コードを生成"""
-        if "デザイン" in user_request and "styles.py" in target_module:
-            return '''
-# 新しいデザインテーマ
-NEW_THEME = {"ocean": {"primary": "#0077be", "secondary": "#00a8cc"}}
-'''
-        elif "性格" in user_request and "llm_client.py" in target_module:
-            return '''
-# 新しい人格タイプ
-NEW_PERSONALITY = {"philosopher": {"name": "哲学者", "prompt": "深遠な哲学者です"}}
-'''
-        return None
+        """改造コード生成（絶対パスのみ使用）"""
+        # 絶対パスのみを使用するようにシステムプロンプトを生成
+        system_prompt = f"""
+[重要な指示: インポートルール]
+以下のコードを生成する際は、必ず絶対インポートを使用してください。
+
+✅ 許可されるインポート形式:
+- from core.module import function_name
+- from ui.module import function_name  
+- from services.module import function_name
+- import module
+
+❌ 禁止されるインポート形式:
+- from ..module import function_name (相対パス)
+- from ...module import function_name (相対パス)
+
+[修対象]
+ターゲットモジュール: {target_module}
+ユーザー要求: {user_request}
+
+[生成指示]
+上記載のインポートルールを厳守って、{target_module} の機能を修正するコードを生成してください。
+"""
+        
+        return system_prompt
     
     def _apply_mutation(self, target_module: str, updated_code: str) -> bool:
         """改造を適用"""
