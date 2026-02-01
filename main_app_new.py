@@ -155,6 +155,25 @@ def process_user_message(user_input):
             
             ollama_client = st.session_state[SESSION_KEYS['ollama']]
             
+            # 自己改造要求をチェック
+            evolution_agent = st.session_state.evolution_agent
+            if any(keyword in user_input for keyword in ["変えて", "変更", "改造", "進化"]):
+                mutation_result = evolution_agent.execute_self_mutation(user_input)
+                
+                if mutation_result["success"]:
+                    st.success(f"🧬 自己改造完了！")
+                    st.info(f"📝 {mutation_result['target_module']} を改造しました")
+                    
+                    if mutation_result.get("new_imports"):
+                        st.info(f"📦 新しいライブラリを追加: {', '.join(mutation_result['new_imports'])}")
+                    
+                    # VRMアバターの反応
+                    vrm_controller = st.session_state[SESSION_KEYS['vrm_controller']]
+                    vrm_controller.set_expression("happy")
+                    
+                    st.rerun()
+                    return
+            
             # UIデザイン一貫性プロンプトを取得
             ui_prompt = get_ui_consistency_prompt()
             
@@ -293,6 +312,67 @@ def render_progress_tab():
     with col2:
         st.metric("進化ルール数", len(evolution_agent.evolution_rules))
         st.metric("会話履歴数", len(st.session_state[SESSION_KEYS['conversation_history']]))
+    
+    # 自己改造機能
+    st.markdown("#### 🧬 自己改造機能")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔧 デザインを変更", key="mutate_design"):
+            mutation_result = evolution_agent.execute_self_mutation("デザインを変えて")
+            if mutation_result["success"]:
+                st.success("✅ デザインを変更しました")
+            else:
+                st.error(f"❌ {mutation_result['error']}")
+    
+    with col2:
+        if st.button("🧠 AI性格を変更", key="mutate_personality"):
+            mutation_result = evolution_agent.execute_self_mutation("AIの性格を変えて")
+            if mutation_result["success"]:
+                st.success("✅ AI性格を変更しました")
+            else:
+                st.error(f"❌ {mutation_result['error']}")
+    
+    # リファクタリング提案
+    st.markdown("#### 📋 リファクタリング提案")
+    
+    if st.button("🔍 コード複雑度をチェック", key="check_complexity"):
+        suggestions = evolution_agent.mutation_manager.suggest_refactoring()
+        
+        if suggestions:
+            st.warning(f"⚠️ {len(suggestions)}件の改善提案があります")
+            
+            for suggestion in suggestions:
+                with st.expander(f"📝 {suggestion['file']}", expanded=False):
+                    st.write(f"**理由**: {suggestion['reason']}")
+                    st.write(f"**提案**: {suggestion['action']}")
+                    st.write(f"**優先度**: {suggestion['priority']}")
+        else:
+            st.success("✅ すべてのモジュールは適切なサイズです")
+    
+    # モジュール構造表示
+    st.markdown("#### 📁 モジュール構造")
+    
+    from core.self_mutation import ModularSelfMutationManager
+    mutation_manager = ModularSelfMutationManager()
+    
+    for dir_path, file_list in mutation_manager.file_structure.items():
+        with st.expander(f"📂 {dir_path}", expanded=False):
+            for file_name in file_list:
+                file_path = dir_path + file_name
+                analysis = mutation_manager.analyze_file_complexity(file_path)
+                
+                if "error" not in analysis:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric(f"📄 {file_name}", f"{analysis['lines']}行")
+                    with col2:
+                        st.metric("関数", analysis['functions'])
+                    with col3:
+                        st.metric("クラス", analysis['classes'])
+                else:
+                    st.error(f"❌ {file_name}: {analysis['error']}")
 
 if __name__ == "__main__":
     main()

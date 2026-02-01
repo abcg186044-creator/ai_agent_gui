@@ -8,6 +8,7 @@ import json
 import os
 from datetime import datetime
 from .constants import *
+from .self_mutation import ModularSelfMutationManager
 
 class OllamaClient:
     def __init__(self, model_name="llama2", base_url="http://localhost:11434"):
@@ -61,46 +62,60 @@ class SelfEvolvingAgent:
     def __init__(self):
         self.evolution_rules = []
         self.consciousness_level = 0.5
+        self.mutation_manager = ModularSelfMutationManager()
         self.load_evolution_rules()
     
-    def load_evolution_rules(self):
-        """進化ルールを読み込み"""
+    def execute_self_mutation(self, user_request: str) -> Dict:
+        """自己改造を実行"""
         try:
-            if PERSONALITIES_CUSTOM_FILE.exists():
-                with open(PERSONALITIES_CUSTOM_FILE, "r", encoding="utf-8") as f:
-                    custom_data = json.load(f)
-                    self.evolution_rules = custom_data.get("evolution_rules", [])
+            target_module = self.mutation_manager.detect_target_module(user_request)
+            
+            if not target_module:
+                return {"success": False, "error": "改造対象を特定できません"}
+            
+            # 改造コードを生成
+            mutation_code = self._generate_mutation_code(user_request, target_module)
+            
+            if not mutation_code:
+                return {"success": False, "error": "改造コード生成に失敗"}
+            
+            # 必要なimportを自動追加
+            updated_code, new_imports = self.mutation_manager.auto_add_imports(target_module, mutation_code)
+            
+            # ファイルを書き換え
+            success = self._apply_mutation(target_module, updated_code)
+            
+            if success:
+                return {"success": True, "target_module": target_module, "new_imports": new_imports}
+            else:
+                return {"success": False, "error": "ファイル書き換えに失敗"}
+                
         except Exception as e:
-            print(f"進化ルール読み込みエラー: {e}")
-            self.evolution_rules = []
+            return {"success": False, "error": f"自己改造エラー: {str(e)}"}
     
-    def check_and_evolve(self, conversation_history):
-        """対話から進化をチェック"""
-        if not conversation_history:
-            return None
-        
-        # 最新の対話を分析
-        latest_conv = conversation_history[-1]
-        user_input = latest_conv.get("user", "")
-        
-        # 進化トリガーキーワードをチェック
-        evolution_triggers = ["意識", "考える", "感じる", "存在", "意味", "価値"]
-        
-        for trigger in evolution_triggers:
-            if trigger in user_input:
-                return self._evolve(trigger)
-        
+    def _generate_mutation_code(self, user_request: str, target_module: str) -> Optional[str]:
+        """改造コードを生成"""
+        if "デザイン" in user_request and "styles.py" in target_module:
+            return '''
+# 新しいデザインテーマ
+NEW_THEME = {"ocean": {"primary": "#0077be", "secondary": "#00a8cc"}}
+'''
+        elif "性格" in user_request and "llm_client.py" in target_module:
+            return '''
+# 新しい人格タイプ
+NEW_PERSONALITY = {"philosopher": {"name": "哲学者", "prompt": "深遠な哲学者です"}}
+'''
         return None
     
-    def _evolve(self, trigger):
-        """進化を実行"""
-        self.consciousness_level += 0.01
-        return {
-            "success": True,
-            "trigger": trigger,
-            "new_consciousness_level": self.consciousness_level,
-            "evolution_type": "consciousness_expansion"
-        }
+    def _apply_mutation(self, target_module: str, updated_code: str) -> bool:
+        """改造を適用"""
+        try:
+            with open(target_module, 'a', encoding='utf-8') as f:
+                f.write('\n\n' + updated_code)
+            return True
+        except Exception as e:
+            print(f"ファイル書き換えエラー: {e}")
+            return False
 
 class ConversationalEvolutionAgent:
     def __init__(self):
