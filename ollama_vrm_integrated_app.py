@@ -3355,6 +3355,136 @@ def cleanup_conversation_history():
     except Exception as e:
         print(f"❌ 履歴クリーンアップエラー: {e}")
 
+def scan_generated_apps():
+    """generated_appsフォルダ内のPythonファイルをスキャン"""
+    try:
+        from pathlib import Path
+        import importlib.util
+        import inspect
+        
+        apps_dir = Path("generated_apps")
+        if not apps_dir.exists():
+            return []
+        
+        apps = []
+        for py_file in apps_dir.glob("*.py"):
+            try:
+                # ファイルのメタデータを取得
+                file_stat = py_file.stat()
+                app_info = {
+                    'name': py_file.stem,
+                    'path': str(py_file),
+                    'size': file_stat.st_size,
+                    'modified': file_stat.st_mtime,
+                    'description': '',
+                    'functions': []
+                }
+                
+                # ファイル内容をスキャンして関数を取得
+                with open(py_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    
+                # 簡単な関数抽出
+                import re
+                functions = re.findall(r'def\s+(\w+)\s*\(', content)
+                app_info['functions'] = functions[:5]  # 最大5個まで
+                
+                # ファイルの先頭コメントを説明として取得
+                lines = content.split('\n')
+                for line in lines:
+                    if line.strip().startswith('#') and not line.strip().startswith('#!'):
+                        app_info['description'] = line.strip('#').strip()
+                        break
+                
+                apps.append(app_info)
+                
+            except Exception as e:
+                print(f"アプリスキャンエラー {py_file}: {e}")
+                continue
+        
+        return sorted(apps, key=lambda x: x['modified'], reverse=True)
+    
+    except Exception as e:
+        print(f"アプリスキャン全体エラー: {e}")
+        return []
+
+def execute_app_inline(app_path, app_name):
+    """アプリをインラインで実行"""
+    try:
+        import sys
+        import importlib.util
+        from pathlib import Path
+        
+        # アプリファイルを動的にインポート
+        spec = importlib.util.spec_from_file_location(app_name, app_path)
+        app_module = importlib.util.module_from_spec(spec)
+        
+        # グローバル変数をクリーンにするための準備
+        original_globals = {}
+        
+        try:
+            # Streamlitのグローバル変数を一時保存
+            for key in ['st', 'streamlit']:
+                if key in globals():
+                    original_globals[key] = globals()[key]
+            
+            # アプリモジュールを実行
+            spec.loader.exec_module(app_module)
+            
+            # main関数があれば実行
+            if hasattr(app_module, 'main'):
+                return app_module.main()
+            
+            return f"✅ {app_name} を読み込みました"
+            
+        except Exception as app_error:
+            return f"❌ アプリ実行エラー: {str(app_error)}"
+        finally:
+            # グローバル変数を復元
+            for key, value in original_globals.items():
+                globals()[key] = value
+                
+    except Exception as e:
+        return f"❌ アプリ読み込みエラー: {str(e)}"
+
+def detect_app_launch_command(text, available_apps):
+    """会話からアプリ起動コマンドを検出"""
+    import re
+    
+    # アプリ起動パターン
+    launch_patterns = [
+        r'(電卓|計算機|calculator).*?(出して|起動|開いて|表示)',
+        r'(.*?)(出して|起動|開いて|表示)',
+        r'(.*?)(を使いたい|を使って|を起動して)',
+    ]
+    
+    app_names = [app['name'].lower() for app in available_apps]
+    
+    for pattern in launch_patterns:
+        matches = re.findall(pattern, text)
+        for match in matches:
+            if isinstance(match, tuple):
+                keyword, action = match
+            else:
+                keyword = match
+                action = "起動"
+            
+            keyword = keyword.lower().strip()
+            
+            # アプリ名と一致するかチェック
+            for app in available_apps:
+                app_name = app['name'].lower()
+                if keyword in app_name or app_name in keyword:
+                    return app, f"{keyword}を{action}します"
+            
+            # 特定のキーワードでアプリを推定
+            if '電卓' in keyword or '計算機' in keyword or 'calculator' in keyword:
+                for app in available_apps:
+                    if 'calc' in app['name'].lower() or '電卓' in app['name']:
+                        return app, "電卓を起動します"
+    
+    return None, None
+
 def extract_todos_from_text(text, source="auto"):
     """テキストからTODOを抽出する関数"""
     import re
@@ -4412,95 +4542,182 @@ if __name__ == "__main__":
             st.markdown("### 🛠️ AIアシスタント・ツール棚")
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # TODOリスト
-            st.markdown("#### 📝 TODOリスト")
+            # ツール棚をtabsで整理
+            tool_tabs = st.tabs(["📝 TODO", "📋 メモ", "🚀 アプリ"])
             
-            # TODOリストの初期化
-            if 'todo_list' not in st.session_state:
-                st.session_state.todo_list = []
-            
-            # 新しいTODO追加
-            new_todo = st.text_input("✏️ 新しいTODO", key="new_todo_input")
-            if st.button("➕ 追加", key="add_todo"):
-                if new_todo.strip():
-                    st.session_state.todo_list.append({
-                        'task': new_todo.strip(),
-                        'completed': False,
-                        'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    })
-                    st.success("✅ TODOを追加しました")
-                    st.rerun()
-            
-            # TODOリスト表示
-            if st.session_state.todo_list:
-                for i, todo in enumerate(st.session_state.todo_list):
-                    col1, col2, col3 = st.columns([3, 1, 1])
-                    with col1:
-                        completed = st.checkbox(todo['task'], key=f"todo_{i}", value=todo['completed'])
-                        if completed != todo['completed']:
-                            st.session_state.todo_list[i]['completed'] = completed
-                            st.rerun()
-                    with col2:
-                        if st.button("🗑️", key=f"delete_todo_{i}"):
-                            st.session_state.todo_list.pop(i)
-                            st.success("🗑️ TODOを削除しました")
-                            st.rerun()
-                    with col3:
-                        st.caption(todo['timestamp'])
-            
-            # クイックメモ
-            st.markdown("#### 📋 クイックメモ")
-            
-            # クイックメモの初期化
-            if 'quick_memos' not in st.session_state:
-                st.session_state.quick_memos = []
-            
-            # 新しいメモ追加
-            new_memo = st.text_area("📝 新しいメモ", key="new_memo_input", height=100)
-            if st.button("💾 保存", key="save_memo"):
-                if new_memo.strip():
-                    st.session_state.quick_memos.append({
-                        'content': new_memo.strip(),
-                        'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        'type': 'manual'
-                    })
-                    st.success("💾 メモを保存しました")
-                    st.rerun()
-            
-            # メモ一覧表示
-            if st.session_state.quick_memos:
-                for i, memo in enumerate(st.session_state.quick_memos[-5:]):  # 最新5件を表示
-                    with st.expander(f"📋 {memo['timestamp']} - {memo['type']}", expanded=False):
-                        st.write(memo['content'])
-                        if st.button("🗑️ 削除", key=f"delete_memo_{i}"):
-                            st.session_state.quick_memos.pop(i)
-                            st.success("🗑️ メモを削除しました")
-                            st.rerun()
-            
-            # 自動TODO検出機能
-            st.markdown("#### 🤖 自動TODO検出")
-            if st.button("🔍 会話からTODOを抽出", key="extract_todos"):
-                if st.session_state.conversation_history:
-                    # 簡単なTODO検出ロジック
-                    todos_extracted = []
-                    for conv in st.session_state.conversation_history[-5:]:  # 最新5件から検出
-                        user_text = conv.get('user', '')
-                        if '明日' in user_text or 'する' in user_text or 'やる' in user_text:
-                            todos_extracted.append(user_text)
-                    
-                    if todos_extracted:
-                        for todo in todos_extracted:
-                            st.session_state.todo_list.append({
-                                'task': f"[自動検出] {todo}",
-                                'completed': False,
-                                'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                            })
-                        st.success(f"✅ {len(todos_extracted)}件のTODOを自動検出しました")
+            with tool_tabs[0]:
+                # TODOリスト
+                st.markdown('<div class="tool-panel">', unsafe_allow_html=True)
+                st.markdown("#### 📝 TODOリスト")
+                
+                # TODOリストの初期化
+                if 'todo_list' not in st.session_state:
+                    st.session_state.todo_list = []
+                
+                # 新しいTODO追加
+                new_todo = st.text_input("✏️ 新しいTODO", key="new_todo_input")
+                if st.button("➕ 追加", key="add_todo"):
+                    if new_todo.strip():
+                        st.session_state.todo_list.append({
+                            'task': new_todo.strip(),
+                            'completed': False,
+                            'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        })
+                        st.success("✅ TODOを追加しました")
+                        save_workspace_state()
                         st.rerun()
+                
+                # TODOリスト表示
+                if st.session_state.todo_list:
+                    for i, todo in enumerate(st.session_state.todo_list):
+                        col1, col2, col3 = st.columns([3, 1, 1])
+                        with col1:
+                            completed = st.checkbox(todo['task'], key=f"todo_{i}", value=todo['completed'])
+                            if completed != todo['completed']:
+                                st.session_state.todo_list[i]['completed'] = completed
+                                save_workspace_state()
+                                st.rerun()
+                        with col2:
+                            if st.button("🗑️", key=f"delete_todo_{i}"):
+                                st.session_state.todo_list.pop(i)
+                                st.success("🗑️ TODOを削除しました")
+                                save_workspace_state()
+                                st.rerun()
+                        with col3:
+                            st.caption(todo['timestamp'])
+                
+                # 自動TODO検出機能
+                st.markdown("#### 🤖 自動TODO検出")
+                if st.button("🔍 会話からTODOを抽出", key="extract_todos"):
+                    if st.session_state.conversation_history:
+                        # 簡単なTODO検出ロジック
+                        todos_extracted = []
+                        for conv in st.session_state.conversation_history[-5:]:  # 最新5件から検出
+                            user_text = conv.get('user', '')
+                            if '明日' in user_text or 'する' in user_text or 'やる' in user_text:
+                                todos_extracted.append(user_text)
+                        
+                        if todos_extracted:
+                            for todo in todos_extracted:
+                                st.session_state.todo_list.append({
+                                    'task': f"[自動検出] {todo}",
+                                    'completed': False,
+                                    'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                })
+                            st.success(f"✅ {len(todos_extracted)}件のTODOを自動検出しました")
+                            save_workspace_state()
+                            st.rerun()
+                        else:
+                            st.info("📝 検出されたTODOはありませんでした")
                     else:
-                        st.info("📝 検出されたTODOはありませんでした")
+                        st.warning("⚠️ 会話履歴がありません")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with tool_tabs[1]:
+                # クイックメモ
+                st.markdown('<div class="tool-panel">', unsafe_allow_html=True)
+                st.markdown("#### 📋 クイックメモ")
+                
+                # クイックメモの初期化
+                if 'quick_memos' not in st.session_state:
+                    st.session_state.quick_memos = []
+                
+                # 新しいメモ追加
+                new_memo = st.text_area("📝 新しいメモ", key="new_memo_input", height=100)
+                if st.button("💾 保存", key="save_memo"):
+                    if new_memo.strip():
+                        st.session_state.quick_memos.append({
+                            'content': new_memo.strip(),
+                            'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            'type': 'manual'
+                        })
+                        st.success("💾 メモを保存しました")
+                        save_workspace_state()
+                        st.rerun()
+                
+                # メモ一覧表示
+                if st.session_state.quick_memos:
+                    for i, memo in enumerate(st.session_state.quick_memos[-5:]):  # 最新5件を表示
+                        with st.expander(f"📋 {memo['timestamp']} - {memo['type']}", expanded=False):
+                            st.write(memo['content'])
+                            if st.button("🗑️ 削除", key=f"delete_memo_{i}"):
+                                st.session_state.quick_memos.pop(i)
+                                st.success("🗑️ メモを削除しました")
+                                save_workspace_state()
+                                st.rerun()
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with tool_tabs[2]:
+                # 生成済みアプリ
+                st.markdown('<div class="tool-panel">', unsafe_allow_html=True)
+                st.markdown("#### 🚀 生成済みアプリ")
+                
+                # アプリをスキャン
+                available_apps = scan_generated_apps()
+                
+                if available_apps:
+                    for app in available_apps:
+                        with st.expander(f"🚀 {app['name']}", expanded=False):
+                            # アプリ情報
+                            if app['description']:
+                                st.caption(f"📝 {app['description']}")
+                            
+                            if app['functions']:
+                                st.caption(f"🔧 関数: {', '.join(app['functions'])}")
+                            
+                            st.caption(f"📅 更新: {datetime.datetime.fromtimestamp(app['modified']).strftime('%Y-%m-%d %H:%M')}")
+                            
+                            # 起動ボタン
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button(f"🚀 起動", key=f"launch_{app['name']}"):
+                                    st.session_state.active_app = app
+                                    st.session_state.show_app_inline = True
+                                    st.success(f"🚀 {app['name']} を起動しました！")
+                                    st.rerun()
+                            
+                            with col2:
+                                if st.button(f"📄 コード表示", key=f"show_code_{app['name']}"):
+                                    try:
+                                        with open(app['path'], 'r', encoding='utf-8') as f:
+                                            code_content = f.read()
+                                        st.code(code_content, language='python')
+                                    except Exception as e:
+                                        st.error(f"❌ コード読み込みエラー: {e}")
+                    
+                    # アプリインライン表示エリア
+                    if 'show_app_inline' in st.session_state and st.session_state.show_app_inline and 'active_app' in st.session_state:
+                        st.markdown("---")
+                        st.markdown("#### 🎯 アプリ実行エリア")
+                        
+                        active_app = st.session_state.active_app
+                        
+                        # アプリ情報
+                        st.info(f"🚀 現在実行中: {active_app['name']}")
+                        
+                        # アプリを実行
+                        try:
+                            result = execute_app_inline(active_app['path'], active_app['name'])
+                            if isinstance(result, str):
+                                st.write(result)
+                            else:
+                                # Streamlitコンポーネントの場合
+                                st.write("✅ アプリを起動しました")
+                        except Exception as e:
+                            st.error(f"❌ アプリ実行エラー: {e}")
+                        
+                        # 閉じるボタン
+                        if st.button("❌ アプリを閉じる", key="close_app"):
+                            st.session_state.show_app_inline = False
+                            st.session_state.active_app = None
+                            st.rerun()
+                
                 else:
-                    st.warning("⚠️ 会話履歴がありません")
+                    st.info("📝 生成済みアプリがありません。AIに「〇〇を作って」と依頼してみてください。")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
             
             # VRMアバターリアクション
             if st.session_state.vrm_controller:
@@ -5105,6 +5322,23 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                                     st.info(f"🎯 {len(new_todos)}件のTODOを自動検出しました！")
                                     for todo in new_todos:
                                         st.caption(f"✓ {todo['task']}")
+                            
+                            # アプリ起動コマンド検出
+                            available_apps = scan_generated_apps()
+                            app_to_launch, launch_message = detect_app_launch_command(st.session_state.recognized_text, available_apps)
+                            
+                            if app_to_launch:
+                                # アプリを起動状態に設定
+                                st.session_state.active_app = app_to_launch
+                                st.session_state.show_app_inline = True
+                                
+                                # 起動メッセージを表示
+                                st.success(f"🚀 {launch_message}！")
+                                st.info(f"💡 右側のツール棚で {app_to_launch['name']} を操作できます")
+                                
+                                # VRMアバターの反応
+                                if st.session_state.vrm_controller:
+                                    st.session_state.vrm_controller.set_expression("happy")
                             
                             # 対話からの自律進化をチェック
                             conversational_agent = st.session_state.conversational_evolution_agent
