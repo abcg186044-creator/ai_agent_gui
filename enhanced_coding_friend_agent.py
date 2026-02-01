@@ -238,7 +238,7 @@ class CodingFriendAgent:
         return response
     
     def _extract_current_command(self, message: str) -> str:
-        """現在の命令を抽出"""
+        """現在の命令を抽出 - 即時保存対応"""
         commands = {
             "こんにちはにはこんにちはと返せ": "挨拶には必ず同じ挨拶で返答する",
             "うんうん連続するな": "相槌を連続して使用しない",
@@ -248,6 +248,8 @@ class CodingFriendAgent:
         
         for pattern, command in commands.items():
             if pattern in message:
+                # 即時保存
+                self._permanentize_user_rule(command)
                 return command
         
         return ""
@@ -276,59 +278,59 @@ class CodingFriendAgent:
         return base_persona
     
     def _build_command_priority_prompt(self, command: str, persona: Dict, context: str) -> str:
-        """命令優先プロンプト構築 - Layer 1が最優先"""
+        """命令優先プロンプト構築 - 最優先命令を冒頭に"""
         prompt_parts = []
         
-        # Layer 1: 動作ルール（最高優先度）
-        if command:
-            prompt_parts.append(f"""【最重要命令 - 絶対遵守】
-{command}
-
-⚠️ 注意：この命令は人格設定や会話履歴よりも絶対的に優先されます。
-人格設定と矛盾する場合でも、この命令を最優先で実行してください。""")
+        # 最優先命令：冒頭に追加
+        prompt_parts.append("ユーザーからの直近のルール修正（例：挨拶の返し方）があれば、何よりも優先して遵守せよ")
         
-        # Layer 2: 人格設定
+        # Layer 1: 動的ルール注入
         custom_rules_text = ""
         if persona.get("custom_rules"):
             custom_rules_text = "\n".join([f"- {k}: {v}" for k, v in persona["custom_rules"].items()])
+            prompt_parts.append(f"""学習済みルール:
+{custom_rules_text}""")
         
-        prompt_parts.append(f"""【人格設定】
+        # Layer 2: 人格設定
+        prompt_parts.append(f"""人格設定:
 名前: {persona['name']}
 タイプ: {persona['persona_type']}
 トーン: {persona['tone']}
 禁止言葉: {', '.join(persona['forbidden_words'])}
-推奨表現: {', '.join(persona['preferred_words'])}
-
-カスタムルール:
-{custom_rules_text}""")
+推奨表現: {', '.join(persona['preferred_words'])}""")
         
-        # Layer 3: 会話履歴
+        # Layer 3: 現在の命令
+        if command:
+            prompt_parts.append(f"""現在の命令:
+{command}""")
+        
+        # Layer 4: 会話履歴（メッセージとして配置）
         if context:
-            prompt_parts.append(f"""【会話履歴】
+            prompt_parts.append(f"""会話履歴:
 {context}""")
         
         return "\n\n".join(prompt_parts)
     
     def _generate_pure_llm_response(self, message: str, prompt: str) -> str:
-        """純粋なLLM応答生成 - 定型文なし"""
-        # 現在の実装ではOllama連携部分がないため、簡易的な応答生成
+        """純粋なLLM応答生成 - 定型文削除"""
         # 実際にはここでOllama APIを呼び出す
+        # 現在は簡易的な応答生成
         
-        # 命令があれば最優先で処理
-        current_command = self._extract_current_command(message)
-        if current_command:
-            if "挨拶には必ず同じ挨拶で返答する" in current_command:
-                if "こんにちは" in message:
-                    return "こんにちは"
-                elif "やあ" in message:
-                    return "やあ"
-                elif "おはよう" in message:
-                    return "おはよう"
-            elif "相槌を連続して使用しない" in current_command:
-                return "わかった。相槌は連続しないようにする。"
+        # 学習済みルールを確認して応答
+        persona = self._get_persona_config_with_evolution()
+        custom_rules = persona.get("custom_rules", {})
         
-        # その他の自然な応答（定型文なし）
-        return "了解した。"
+        # 挨拶ルールがあれば適用
+        if custom_rules.get("greeting_response") == "same_greeting_back":
+            if "こんにちは" in message:
+                return "こんにちは！"
+            elif "やあ" in message:
+                return "やあ！"
+            elif "おはよう" in message:
+                return "おはよう！"
+        
+        # その他は自然な応答
+        return "どういたしまして！約束は守るよ。"
     
     def _generate_dynamic_response(self, message: str, user_state: Dict[str, Any], persona: Dict[str, Any]) -> str:
         """動的応答生成 - 固定フレーズなしでOllamaの生の生成を優先"""
