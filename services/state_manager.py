@@ -50,6 +50,15 @@ def clear_file_cache():
     global _file_cache
     _file_cache.clear()
 
+def resolve_target_file(user_request: str) -> Optional[str]:
+    """ユーザー要求から修正対象ファイルを特定"""
+    try:
+        from ..core.file_map import resolve_target_file as file_map_resolver
+        return file_map_resolver(user_request)
+    except Exception as e:
+        print(f"ターゲットファイル解決エラー: {e}")
+        return None
+
 def get_optimized_file_list(user_request: str) -> list:
     """ユーザー要求に基づいて最適化されたファイルリストを取得"""
     all_files = list(file_resolver.file_map.keys())

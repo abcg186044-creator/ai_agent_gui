@@ -157,12 +157,14 @@ def process_user_message(user_input):
             
             # 自己改造要求をチェック
             evolution_agent = st.session_state.evolution_agent
-            if any(keyword in user_input for keyword in ["変えて", "変更", "改造", "進化"]):
-                mutation_result = evolution_agent.execute_self_mutation(user_input)
+            if any(keyword in user_input for keyword in ["変えて", "変更", "改造", "進化", "書き換えて"]):
+                # 局所的自己改造を実行
+                mutation_result = evolution_agent.apply_self_mutation(user_input)
                 
                 if mutation_result["success"]:
-                    st.success(f"🧬 自己改造完了！")
-                    st.info(f"📝 {mutation_result['target_module']} を改造しました")
+                    st.success(f"🎯 局所的自己改造完了！")
+                    st.info(f"📝 {mutation_result['target_file']} のみを修正しました")
+                    st.info(f"💾 バックアップ: {mutation_result['backup_path']}")
                     
                     # インポート同期結果を表示
                     if "sync_result" in mutation_result:
@@ -194,13 +196,15 @@ def process_user_message(user_input):
                             for error in validation_result["errors"]:
                                 st.caption(f"• {error}")
                     
-                    if mutation_result.get("new_imports"):
-                        st.info(f"📦 新しいライブラリを追加: {', '.join(mutation_result['new_imports'])}")
-                    
                     # VRMアバターの反応
                     vrm_controller = st.session_state[SESSION_KEYS['vrm_controller']]
                     vrm_controller.set_expression("happy")
                     
+                    return
+                else:
+                    st.error(f"❌ 自己改造に失敗しました: {mutation_result['error']}")
+                    if mutation_result.get("suggestion"):
+                        st.info(f"💡 提案: {mutation_result['suggestion']}")
                     return
             
             # UIデザイン一貫性プロンプトを取得

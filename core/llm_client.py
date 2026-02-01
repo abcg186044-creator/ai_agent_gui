@@ -66,6 +66,86 @@ class SelfEvolvingAgent:
         self.mutation_manager = ModularSelfMutationManager()
         self.load_evolution_rules()
     
+    def apply_self_mutation(self, user_request: str) -> Dict:
+        """特定ファイルを狙い撃ちする局所的自己改造を実行"""
+        try:
+            from services.state_manager import resolve_target_file
+            from services.app_generator import partial_mutation_manager
+            from services.backup_manager import backup_manager
+            from services.import_sync import import_synchronizer, module_validator
+            
+            # ターゲットファイルを特定
+            target_file = resolve_target_file(user_request)
+            
+            if not target_file:
+                return {
+                    "success": False,
+                    "error": "修正対象ファイルを特定できませんでした",
+                    "suggestion": "より具体的な指示（例：「デザインを変えて」「UIのスタイルを修正」）を試してください"
+                }
+            
+            # ターゲットファイルのみを読み込み
+            print(f"🎯 ターゲットファイル: {target_file}")
+            
+            # 安全な部分バックアップを作成
+            backup_path = backup_manager.create_backup(target_file)
+            
+            if not backup_path:
+                return {
+                    "success": False,
+                    "error": "バックアップ作成に失敗しました"
+                }
+            
+            # 修正が必要なコードブロックを抽出
+            target_function = self._estimate_target_function(user_request, target_file)
+            
+            # 最適化されたプロンプトを生成（ターゲットファイルのみ）
+            focused_prompt = partial_mutation_manager.generate_focused_prompt(
+                target_file, user_request, target_function
+            )
+            
+            # LLMに修正コードを生成させる
+            if not st.session_state.get(SESSION_KEYS['ollama']):
+                st.session_state[SESSION_KEYS['ollama']] = OllamaClient()
+            
+            ollama_client = st.session_state[SESSION_KEYS['ollama']]
+            modified_code = ollama_client.generate_response(focused_prompt)
+            
+            # 特定ファイルのみを上書き保存
+            mutation_result = partial_mutation_manager.apply_partial_mutation(
+                target_file, modified_code, target_function
+            )
+            
+            if mutation_result["success"]:
+                # インポート同期を実行
+                sync_result = import_synchronizer.sync_imports_after_mutation(target_file)
+                
+                # モジュールバリデーションを実行
+                validation_result = module_validator.validate_all_modules()
+                
+                return {
+                    "success": True,
+                    "target_file": target_file,
+                    "backup_path": backup_path,
+                    "target_function": target_function,
+                    "sync_result": sync_result,
+                    "validation_result": validation_result,
+                    "message": f"{target_file} のみを正常に修正しました"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": mutation_result["error"],
+                    "target_file": target_file,
+                    "backup_path": backup_path
+                }
+                
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"局所的自己改造エラー: {str(e)}"
+            }
+    
     def execute_self_mutation(self, user_request: str) -> Dict:
         """自己改造を実行（ファイルマップ対応版）"""
         try:
