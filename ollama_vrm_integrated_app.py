@@ -2288,8 +2288,6 @@ def main():
     
     if "current_personality" not in st.session_state:
         st.session_state.current_personality = "friendly_engineer"
-    if "vrm_controller" not in st.session_state:
-        st.session_state.vrm_controller = VRMAvatarController()
     if "ollama" not in st.session_state:
         st.session_state.ollama = None
     if "recognized_text" not in st.session_state:
@@ -2786,18 +2784,62 @@ if __name__ == "__main__":
             st.components.v1.html(audio_html, height=200)
         
         elif input_method == "💬 テキスト入力":
-            # テキスト入力（user_input_textとrecognized_textを分離して書き換えエラーを防止）
-            user_input = st.text_area(
-                "💬 メッセージを入力:",
-                value=st.session_state.get("user_input_text", ""),
-                height=100,
-                help="ここにメッセージを入力してください"
-            )
-            st.session_state.user_input_text = user_input
+            # LINE風メッセージ入力
+            st.markdown("""
+            <style>
+            .message-input-container {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background-color: white;
+                padding: 10px;
+                border-top: 1px solid #e0e0e0;
+                z-index: 999;
+            }
+            .message-input {
+                width: 100%;
+                padding: 10px;
+                border: 1px solid #e0e0e0;
+                border-radius: 20px;
+                outline: none;
+            }
+            .send-button {
+                background-color: #00c300;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 20px;
+                margin-left: 10px;
+                cursor: pointer;
+            }
+            </style>
+            """, unsafe_allow_html=True)
             
-            if st.button("📤 メッセージ送信", help="入力したメッセージを送信"):
+            # メッセージ入力エリア
+            col1, col2 = st.columns([4, 1])
+            
+            with col1:
+                user_input = st.text_input(
+                    "💬 メッセージを入力",
+                    value=st.session_state.get("user_input_text", ""),
+                    key="line_message_input",
+                    placeholder="メッセージを入力してください...",
+                    help="Enterキーで送信できます"
+                )
+                st.session_state.user_input_text = user_input
+            
+            with col2:
+                send_button = st.button("📤 送信", type="primary", help="メッセージを送信")
+            
+            # Enterキーまたは送信ボタンでメッセージ送信
+            if send_button or (user_input and user_input != st.session_state.get("last_input", "")):
                 if user_input.strip():
                     st.session_state.recognized_text = user_input.strip()
+                    st.session_state.last_input = user_input
+                    # 入力フィールドをクリア
+                    st.session_state.user_input_text = ""
+                    st.rerun()
                 else:
                     st.warning("メッセージを入力してください")
         
@@ -3620,15 +3662,107 @@ if __name__ == "__main__":
         current_personality = personalities[st.session_state.current_personality]
         st.info("**現在の人格**: " + current_personality['icon'] + " " + current_personality['name'] + "\n\n**表情**: " + vrm_controller.expressions.get(st.session_state.current_personality, 'neutral'))
     
-    # 会話履歴表示
-    if st.session_state.conversation_history:
-        st.header("💬 会話履歴")
-        
-        for i, msg in enumerate(reversed(st.session_state.conversation_history[-10:])):
-            with st.expander(f"💭 {msg['user'][:30]}... ({msg.get('timestamp', 'N/A')})"):
-                st.write(f"**ユーザー**: {msg['user']}")
-                st.write(f"**AI**: {msg['assistant']}")
-                st.write(f"**人格**: {personalities[msg['personality']]['name']}")
+    # LINE風チャット表示（メインコンテンツの最後に配置）
+    with st.container():
+        if st.session_state.conversation_history:
+            st.header("💬 チャット")
+            
+            # チャットスタイルのCSS
+            st.markdown("""
+            <style>
+            .chat-wrapper {
+                background-color: #f8f9fa;
+                border-radius: 10px;
+                padding: 20px;
+                margin-bottom: 100px; /* 入力エリアのスペースを確保 */
+                max-height: 600px;
+                overflow-y: auto;
+            }
+            .user-message {
+                background-color: #00c300;
+                color: white;
+                padding: 10px 15px;
+                border-radius: 18px;
+                margin-bottom: 10px;
+                max-width: 70%;
+                margin-left: auto;
+                text-align: right;
+                word-wrap: break-word;
+                clear: both;
+            }
+            .ai-message {
+                background-color: white;
+                color: #333;
+                padding: 10px 15px;
+                border-radius: 18px;
+                margin-bottom: 10px;
+                max-width: 70%;
+                border: 1px solid #e0e0e0;
+                word-wrap: break-word;
+                clear: both;
+            }
+            .message-time {
+                font-size: 11px;
+                color: #999;
+                margin-top: 5px;
+            }
+            .personality-tag {
+                background-color: #ff9500;
+                color: white;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 10px;
+                margin-left: 5px;
+            }
+            .chat-avatar {
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                margin-right: 10px;
+                float: left;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            # 最新の会話履歴を表示
+            recent_messages = st.session_state.conversation_history[-20:]  # 最新20件を表示
+            
+            for msg in recent_messages:
+                # ユーザーメッセージ（右側）
+                st.markdown(f"""
+                <div class="chat-wrapper">
+                    <div class="user-message">
+                        {msg['user']}
+                        <div class="message-time">{msg.get('timestamp', '')[:19]}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # AIメッセージ（左側）
+                personality_name = personalities[msg['personality']]['name']
+                personality_icon = personalities[msg['personality']]['icon']
+                st.markdown(f"""
+                <div class="chat-wrapper">
+                    <div class="ai-message">
+                        <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                            <span style="font-size: 24px; margin-right: 8px;">{personality_icon}</span>
+                            <strong>{personality_name}</strong>
+                        </div>
+                        {msg['assistant']}
+                        <div class="message-time">{msg.get('timestamp', '')[:19]}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # 自動スクロール用のJavaScript
+            st.markdown("""
+            <script>
+            // チャットを一番下までスクロール
+            setTimeout(function() {
+                window.scrollTo(0, document.body.scrollHeight);
+            }, 100);
+            </script>
+            """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
