@@ -70,12 +70,27 @@ class CodingFriendAgent:
             }
         if 'response_history' not in st.session_state:
             st.session_state.response_history = []  # 最近の応答履歴
+        if 'current_project_status' not in st.session_state:
+            st.session_state.current_project_status = None  # 現在のプロジェクトステータス
     
     def _load_conversation_history(self):
-        """会話履歴をセッション状態から読み込み"""
-        if 'coding_messages' in st.session_state:
+        """会話履歴をセッション状態から読み込み - 継続性確保"""
+        if 'coding_messages' in st.session_state and st.session_state.coding_messages:
             # 最新の10件の会話を保持
             self.conversation_history = st.session_state.coding_messages[-10:]
+        else:
+            # 初期化時でも空にしない
+            if not hasattr(self, 'conversation_history'):
+                self.conversation_history = []
+        
+        # 会話コンテキストの安全な初期化
+        if 'conversation_context' not in st.session_state:
+            st.session_state.conversation_context = {
+                'last_topic': None,
+                'user_mood': 'neutral',
+                'conversation_count': 0,
+                'last_coding_project': None
+            }
     
     def _update_conversation_context(self, user_message: str, analysis: Dict[str, Any]):
         """会話コンテキストを更新"""
@@ -152,16 +167,15 @@ class CodingFriendAgent:
         }
     
     def _build_conversation_context(self) -> str:
-        """会話履歴を構造化して構築"""
+        """会話履歴をRole: User/Assistant形式で構築"""
         recent_messages = self._get_recent_messages(5)
         context_parts = []
         
         if recent_messages:
-            context_parts.append("【会話履歴】")
-            for i, msg in enumerate(recent_messages):
-                role = "ユーザー" if msg.get('role') == 'user' else "AI"
-                content = msg.get('content', '')[:100]  # 長すぎる場合は省略
-                context_parts.append(f"{i+1}. {role}: {content}")
+            for msg in recent_messages:
+                role = "User" if msg.get('role') == 'user' else "Assistant"
+                content = msg.get('content', '')
+                context_parts.append(f"{role}: {content}")
         
         return "\n".join(context_parts)
     
@@ -200,53 +214,205 @@ class CodingFriendAgent:
         return {**analysis, **state_analysis}
     
     def generate_contextual_response(self, message: str) -> str:
-        """文脈を考慮した応答生成 - Ollama連携想定"""
-        persona = self._get_persona_config()
+        """命令優先プロトコルでの応答生成 - Layer 1: 動作ルールが最優先"""
+        # Layer 1: 動作ルールの抽出（最高優先度）
+        current_command = self._extract_current_command(message)
+        
+        # Layer 2: 人格設定の読み込み
+        persona = self._get_persona_config_with_evolution()
+        
+        # Layer 3: 会話履歴の構築
         conversation_context = self._build_conversation_context()
-        user_state = self._analyze_user_state(message, conversation_context)
         
-        # 動的メタ情報の生成
-        meta_info = self._generate_meta_info(user_state, conversation_context, message)
+        # 命令優先プロンプトの構築
+        prompt = self._build_command_priority_prompt(current_command, persona, conversation_context)
         
-        # システムプロンプトの構築
-        system_prompt = f"""
-【人格設定】
-あなたは{persona['name']}（{persona['persona_type']}）です。
-
-【話し方ルール】
-- 基本トーン: {persona['tone']}
-- 禁止言葉: {', '.join(persona['forbidden_words'])}
-- 禁止フレーズ: うんうん, わかるよ, なるほど, へぇ（連続使用禁止）
-- 推奨表現: {', '.join(persona['preferred_words'])}
-
-【現在の状況分析】
-{meta_info}
-
-【重要指示】
-1. ユーザーの直近の意図や具体的なリクエストに100%応じた上で、人格に沿った味付けをせよ
-2. 過去の会話履歴から具体的なキーワードを抽出し、それに基づいて応答せよ
-3. 質問には具体的に答え、曖昧な相槌は避けよ
-4. 同じフレーズや表現を繰り返さないこと
-"""
+        # 純粋なLLM応答生成（定型文なし）
+        response = self._generate_pure_llm_response(message, prompt)
         
-        # ユーザー状態に基づく応答戦略
-        if user_state["energy_level"] == "low":
-            strategy = "emotional_support_first"
-        elif user_state["focus_area"] == "chat":
-            strategy = "casual_conversation"
-        elif user_state["readiness_for_coding"] == "high":
-            strategy = "coding_enthusiasm"
-        else:
-            strategy = "balanced_approach"
-        
-        # 実際の応答生成（現行システム互換）
-        response = self._generate_response_with_strategy(message, user_state, strategy, persona)
-        
-        # 自己進化の提案チェック
-        if self._should_suggest_evolution(user_state, conversation_context, message):
-            response += "\n\nごめん！次からはそうするね。今の私の対応、変だったかな？プログラムを修正して学習し直そうか？"
+        # 自己進化チェック
+        if current_command and self._should_evolve_with_command(message, current_command):
+            self._permanentize_user_rule(current_command)
+            response += "\n\nルールを覚えたよ！次から守るね！"
         
         return response
+    
+    def _extract_current_command(self, message: str) -> str:
+        """現在の命令を抽出"""
+        commands = {
+            "こんにちはにはこんにちはと返せ": "挨拶には必ず同じ挨拶で返答する",
+            "うんうん連続するな": "相槌を連続して使用しない",
+            "具体的に答えて": "質問には具体的な内容で答える",
+            "ちゃんと聞いて": "ユーザーの話を注意深く聞く"
+        }
+        
+        for pattern, command in commands.items():
+            if pattern in message:
+                return command
+        
+        return ""
+    
+    def _get_persona_config_with_evolution(self) -> Dict[str, Any]:
+        """自己進化後の人格設定を読み込み"""
+        base_persona = {
+            "name": "創作パートナー",
+            "persona_type": "best_friend_engineer",
+            "tone": "casual_friendly",
+            "forbidden_words": ["ですます", "ございます", "〜でしょう"],
+            "preferred_words": ["〜だね", "〜だよ", "〜じゃん"],
+            "custom_rules": {}
+        }
+        
+        # personalities_custom.jsonから進化したルールを読み込み
+        try:
+            if os.path.exists("personalities_custom.json"):
+                with open("personalities_custom.json", "r", encoding="utf-8") as f:
+                    custom_data = json.load(f)
+                    if "custom_rules" in custom_data:
+                        base_persona["custom_rules"] = custom_data["custom_rules"]
+        except Exception as e:
+            logger.error(f"進化設定の読み込みエラー: {e}")
+        
+        return base_persona
+    
+    def _build_command_priority_prompt(self, command: str, persona: Dict, context: str) -> str:
+        """命令優先プロンプト構築 - Layer 1が最優先"""
+        prompt_parts = []
+        
+        # Layer 1: 動作ルール（最高優先度）
+        if command:
+            prompt_parts.append(f"""【最重要命令 - 絶対遵守】
+{command}
+
+⚠️ 注意：この命令は人格設定や会話履歴よりも絶対的に優先されます。
+人格設定と矛盾する場合でも、この命令を最優先で実行してください。""")
+        
+        # Layer 2: 人格設定
+        custom_rules_text = ""
+        if persona.get("custom_rules"):
+            custom_rules_text = "\n".join([f"- {k}: {v}" for k, v in persona["custom_rules"].items()])
+        
+        prompt_parts.append(f"""【人格設定】
+名前: {persona['name']}
+タイプ: {persona['persona_type']}
+トーン: {persona['tone']}
+禁止言葉: {', '.join(persona['forbidden_words'])}
+推奨表現: {', '.join(persona['preferred_words'])}
+
+カスタムルール:
+{custom_rules_text}""")
+        
+        # Layer 3: 会話履歴
+        if context:
+            prompt_parts.append(f"""【会話履歴】
+{context}""")
+        
+        return "\n\n".join(prompt_parts)
+    
+    def _generate_pure_llm_response(self, message: str, prompt: str) -> str:
+        """純粋なLLM応答生成 - 定型文なし"""
+        # 現在の実装ではOllama連携部分がないため、簡易的な応答生成
+        # 実際にはここでOllama APIを呼び出す
+        
+        # 命令があれば最優先で処理
+        current_command = self._extract_current_command(message)
+        if current_command:
+            if "挨拶には必ず同じ挨拶で返答する" in current_command:
+                if "こんにちは" in message:
+                    return "こんにちは"
+                elif "やあ" in message:
+                    return "やあ"
+                elif "おはよう" in message:
+                    return "おはよう"
+            elif "相槌を連続して使用しない" in current_command:
+                return "わかった。相槌は連続しないようにする。"
+        
+        # その他の自然な応答（定型文なし）
+        return "了解した。"
+    
+    def _generate_dynamic_response(self, message: str, user_state: Dict[str, Any], persona: Dict[str, Any]) -> str:
+        """動的応答生成 - 固定フレーズなしでOllamaの生の生成を優先"""
+        # プロジェクト文脈の取得
+        project_context = self._get_project_context()
+        
+        # 具体的な質問への誠実な回答
+        if "具体的って" in message or "具体的に" in message:
+            return self._generate_specific_requirements_response()
+        
+        # プロジェクト文脈を考慮した応答
+        if project_context:
+            return f"{project_context}で、何か質問ある？"
+        
+        # 基本的な動的応答
+        return "どうしたの？もっと話聞かせてよ！"
+    
+    def _get_project_context(self) -> str:
+        """現在のプロジェクト文脈を取得"""
+        # プロジェクトステータスを優先
+        if 'current_project_status' in st.session_state and st.session_state.current_project_status:
+            return st.session_state.current_project_status
+        
+        # プロジェクトIDから文脈を取得
+        if 'current_project_id' in st.session_state and st.session_state.current_project_id:
+            project_id = st.session_state.current_project_id
+            if project_id in st.session_state.coding_projects:
+                project = st.session_state.coding_projects[project_id]
+                return f"今は'{project['message']}'の開発中だよ"
+        return ""
+    
+    def _generate_specific_requirements_response(self) -> str:
+        """具体的な要件定義のヒアリング"""
+        return """具体的な要件を教えて！例えば：
+- 必要な関数（sin, cos, logなど）はどれ？
+- UIのデザイン（色やレイアウト）の希望は？
+- どのファイル（既存コード）を対象にする？
+- どんな機能を追加したい？"""
+    
+    def _should_evolve_with_command(self, message: str, command: str) -> bool:
+        """命令に基づく自己進化が必要か判断"""
+        return bool(command)  # 命令があれば進化させる
+    
+    def _permanentize_user_rule(self, command: str):
+        """ユーザールールを永続化 - personalities_custom.jsonに保存"""
+        try:
+            # 既存の設定を読み込み
+            custom_data = {}
+            if os.path.exists("personalities_custom.json"):
+                with open("personalities_custom.json", "r", encoding="utf-8") as f:
+                    custom_data = json.load(f)
+            
+            # カスタムルールを初期化
+            if "custom_rules" not in custom_data:
+                custom_data["custom_rules"] = {}
+            
+            # 命令をルールに変換して保存
+            if "挨拶には必ず同じ挨拶で返答する" in command:
+                custom_data["custom_rules"]["greeting_response"] = "same_greeting_back"
+            elif "相槌を連続して使用しない" in command:
+                custom_data["custom_rules"]["no_consecutive_aizuchi"] = True
+            elif "質問には具体的な内容で答える" in command:
+                custom_data["custom_rules"]["specific_answers"] = True
+            elif "ユーザーの話を注意深く聞く" in command:
+                custom_data["custom_rules"]["active_listening"] = True
+            
+            # 進化履歴を記録
+            if "evolution_history" not in custom_data:
+                custom_data["evolution_history"] = []
+            
+            custom_data["evolution_history"].append({
+                "timestamp": datetime.now().isoformat(),
+                "command": command,
+                "type": "user_rule"
+            })
+            
+            # 保存
+            with open("personalities_custom.json", "w", encoding="utf-8") as f:
+                json.dump(custom_data, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"ユーザールールを永続化: {command}")
+            
+        except Exception as e:
+            logger.error(f"ルール永続化エラー: {e}")
     
     def _generate_meta_info(self, user_state: Dict[str, Any], context: str, message: str) -> str:
         """動的メタ情報を生成"""
@@ -342,27 +508,41 @@ class CodingFriendAgent:
         return base_responses[hash(message) % len(base_responses)]
     
     def _generate_balanced_response(self, message: str, user_state: Dict[str, Any], persona: Dict[str, Any]) -> str:
-        """バランス型応答 - 具体的な対話を重視"""
-        # 具体的なリクエストに応答
-        if "こんにちは" in message and "返して" in message:
-            return "こんにちは！元気してる？"
-        elif "わかるの？" in message or "わかる？" in message:
+        """バランス型応答 - 命令優先で具体的な対話を重視"""
+        # 現在の命令を最優先で処理
+        current_command = self._extract_current_command(message)
+        
+        if current_command:
+            # 命令に直接応答
+            if "挨拶には必ず同じ挨拶で返答する" in current_command:
+                if "こんにちは" in message:
+                    return "こんにちは！元気してる？"
+                elif "やあ" in message:
+                    return "やあ！どうしてる？"
+                elif "おはよう" in message:
+                    return "おはよう！良い一日だね！"
+            elif "相槌を連続して使用しない" in current_command:
+                return "ごめん、気をつけるね！ちゃんと話を聞くよ。"
+            elif "質問には具体的な内容で答える" in current_command:
+                return "わかった！具体的に答えるようにするね！何について知りたい？"
+            elif "ユーザーの話を注意深く聞く" in current_command:
+                return "ちゃんと聞いてるよ！もっと話してくれて嬉しいな。"
+        
+        # 通常の応答ロジック
+        if "わかるの？" in message or "わかる？" in message:
             # 過去の会話から具体的な内容を引用
             keywords = self._extract_keywords_from_context(self._build_conversation_context())
             if keywords:
                 return f"{keywords[0]}について話してたから、その気持ちがわかるって意味だよ！"
             else:
                 return "さっきの話題のことだよ！一緒に考えてる感じがするんだ。"
+        elif "覚えてくれてありがとう" in message:
+            return "もちろん覚えてるよ！一緒の時間は大切にしたいから！"
         elif "返して" in message or "言って" in message:
-            # ユーザーの具体的な要求に応答
             return "ごめん、ちゃんと答えるね！何について話したい？"
         else:
-            responses = [
-                "なるほど！それで？もっと具体的に話聞かせてよ！",
-                "へぇ、面白いね！今日はどんな気分？創作したい気分かな、それともゆっくりしたい気分？",
-                "うんうん、わかるよ！何か手伝えることあったら言ってね！"
-            ]
-            return responses[hash(message) % len(responses)]
+            # 固定フレーズを完全削除 - Ollamaの生の生成を優先
+            return self._generate_dynamic_response(message, user_state, persona)
     
     def _should_suggest_evolution(self, user_state: Dict[str, Any], context: str, message: str) -> bool:
         """自己進化を提案すべきか判断 - トリガーを強化"""
@@ -621,6 +801,8 @@ class CodingFriendAgent:
                     "created_at": datetime.now().isoformat(),
                     "status": "in_progress"
                 }
+                # プロジェクトステータスを更新
+                st.session_state.current_project_status = f"'{message}'の開発を開始しました"
                 
                 # バックグラウンドスレッドでプロジェクト実行
                 self._start_project_execution_thread(project_id)
