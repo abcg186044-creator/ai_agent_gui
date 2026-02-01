@@ -2214,10 +2214,10 @@ class OllamaClient:
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": 0.8,
+                        "temperature": 0.7,
                         "top_p": 0.9,
-                        "repeat_penalty": 1.2,
-                        "num_ctx": 4096
+                        "repeat_penalty": 1.1,
+                        "num_ctx": 8192
                     }
                 },
                 timeout=60
@@ -3019,17 +3019,41 @@ if __name__ == "__main__":
                         
                         # プロンプト構築（アバター状態に応じて調整）
                         # システムプロンプトの冒頭に出力の最低条件をハードコード
-                        system_prompt = "あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字程度で構成してください。"
+                        system_prompt = "あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。"
+                        
+                        # Few-Shotプロンプト（理想的な会話例）
+                        few_shot_examples = """
+理想的な会話例:
+ユーザー: 「こんにちは」
+AI: 「やあ！今日は何か面白いコードを書いてる？手伝えることがあったら何でも言ってね！」
+
+ユーザー: 「電卓作って」
+AI: 「いいね！シンプルな四則演算かな、それとも科学計算もできるやつ？まずはPythonの基本的なクラス構造から考えてみようか。」
+
+ユーザー: 「エラーが出た」
+AI: 「大変だったね！どんなエラーメッセージが出たか教えてくれる？一緒にデバッグしていこう。エラーは成長のチャンスだからね！」
+"""
+                        
+                        # Chain of Thought（思考プロセスの誘導）
+                        chain_of_thought = """
+回答の前に、ユーザーが何を求めているか、現在の会話の雰囲気はどうかを内部的に分析し、その分析に基づいた最適なトーンで回答を生成してください。
+"""
+                        
+                        # 回答の肉付け命令
+                        response_constraints = """
+短文（了解、なるほど等）での回答を厳禁します。必ずユーザーの発言に共感し、その後に自分の意見や提案を付け加え、150文字〜300文字程度の『人間らしい』段落構成で回答してください。
+"""
                         
                         base_prompt = current_personality['prompt']
                         if not st.session_state.vrm_visible:
                             # アバター非表示時の対話肉付けプロンプト
-                            enhanced_prompt = system_prompt + "\n\n" + base_prompt + "\n\n" + \
+                            enhanced_prompt = system_prompt + "\n\n" + few_shot_examples + "\n\n" + chain_of_thought + "\n\n" + base_prompt + "\n\n" + \
                                 "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。" + \
                                 "簡潔すぎる応答を避け、ユーザーの意図を汲み取った親しみやすい文章を生成してください。" + \
-                                "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。"
+                                "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。" + \
+                                response_constraints
                         else:
-                            enhanced_prompt = system_prompt + "\n\n" + base_prompt
+                            enhanced_prompt = system_prompt + "\n\n" + few_shot_examples + "\n\n" + chain_of_thought + "\n\n" + base_prompt + "\n\n" + response_constraints
                         
                         prompt = (enhanced_prompt + "\n\n" + 
                                  "以下のユーザーの入力に対して、人格に応じて自然に応答してください。\n\n" +
@@ -3131,17 +3155,41 @@ if __name__ == "__main__":
                         
                         # プロンプト構築（アバター状態に応じて調整）
                         # システムプロンプトの冒頭に出力の最低条件をハードコード
-                        system_prompt = "あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字程度で構成してください。"
+                        system_prompt = "あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。"
+                        
+                        # Few-Shotプロンプト（理想的な会話例）
+                        few_shot_examples = """
+理想的な会話例:
+ユーザー: 「こんにちは」
+AI: 「やあ！今日は何か面白いコードを書いてる？手伝えることがあったら何でも言ってね！」
+
+ユーザー: 「電卓作って」
+AI: 「いいね！シンプルな四則演算かな、それとも科学計算もできるやつ？まずはPythonの基本的なクラス構造から考えてみようか。」
+
+ユーザー: 「エラーが出た」
+AI: 「大変だったね！どんなエラーメッセージが出たか教えてくれる？一緒にデバッグしていこう。エラーは成長のチャンスだからね！」
+"""
+                        
+                        # Chain of Thought（思考プロセスの誘導）
+                        chain_of_thought = """
+回答の前に、ユーザーが何を求めているか、現在の会話の雰囲気はどうかを内部的に分析し、その分析に基づいた最適なトーンで回答を生成してください。
+"""
+                        
+                        # 回答の肉付け命令
+                        response_constraints = """
+短文（了解、なるほど等）での回答を厳禁します。必ずユーザーの発言に共感し、その後に自分の意見や提案を付け加え、150文字〜300文字程度の『人間らしい』段落構成で回答してください。
+"""
                         
                         base_prompt = current_personality['prompt']
                         if not st.session_state.vrm_visible:
                             # アバター非表示時の対話肉付けプロンプト
-                            enhanced_prompt = system_prompt + "\n\n" + base_prompt + "\n\n" + \
+                            enhanced_prompt = system_prompt + "\n\n" + few_shot_examples + "\n\n" + chain_of_thought + "\n\n" + base_prompt + "\n\n" + \
                                 "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。" + \
                                 "簡潔すぎる応答を避け、ユーザーの意図を汲み取った親しみやすい文章を生成してください。" + \
-                                "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。"
+                                "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。" + \
+                                response_constraints
                         else:
-                            enhanced_prompt = system_prompt + "\n\n" + base_prompt
+                            enhanced_prompt = system_prompt + "\n\n" + few_shot_examples + "\n\n" + chain_of_thought + "\n\n" + base_prompt + "\n\n" + response_constraints
                         
                         prompt = (enhanced_prompt + "\n\n" + 
                                  "以下のユーザーの入力に対して、人格に応じて自然に応答してください。\n\n" +
