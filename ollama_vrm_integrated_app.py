@@ -2242,7 +2242,13 @@ class OllamaClient:
                 result = response.json()
                 ai_response = result.get("response", "")
                 print("✅ AI応答生成成功: " + str(len(ai_response)) + " 文字")
-                return ai_response
+                
+                # ファイル書き出しアクションの処理
+                processed_response, generated_files = self._process_file_generation(ai_response)
+                if generated_files:
+                    print(f"✅ ファイル生成成功: {generated_files}")
+                
+                return processed_response
             else:
                 print("❌ Ollama APIエラー: " + str(response.status_code))
                 print("❌ レスポンス: " + response.text)
@@ -2257,6 +2263,58 @@ class OllamaClient:
         except Exception as e:
             print("❌ Ollama APIエラー: " + str(e))
             return "AI応答の生成に失敗しました: " + str(e)
+
+    def _process_file_generation(self, response):
+        """AI応答内のファイル生成タグを処理"""
+        import re
+        import os
+        
+        generated_files = []
+        processed_response = response
+        
+        try:
+            # [WRITE_FILE: filename.py] ... [/WRITE_FILE] パターンを検索
+            file_pattern = r'\[WRITE_FILE:\s*([^\]]+)\](.*?)\[/WRITE_FILE\]'
+            matches = re.findall(file_pattern, response, re.DOTALL)
+            
+            for filename, content in matches:
+                filename = filename.strip()
+                content = content.strip()
+                
+                if filename and content:
+                    # generated_appsディレクトリに保存
+                    file_path = os.path.join("generated_apps", filename)
+                    
+                    try:
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            f.write(content)
+                        
+                        generated_files.append(filename)
+                        print(f"✅ ファイル生成成功: {filename}")
+                        
+                        # セッション状態に追加
+                        if 'generated_files' not in st.session_state:
+                            st.session_state.generated_files = []
+                        if filename not in st.session_state.generated_files:
+                            st.session_state.generated_files.append(filename)
+                        
+                    except Exception as e:
+                        print(f"❌ ファイル生成エラー ({filename}): {e}")
+            
+            # 生成タグを応答から削除（クリーンな表示のため）
+            if matches:
+                processed_response = re.sub(file_pattern, '', response, flags=re.DOTALL)
+                processed_response = processed_response.strip()
+                
+                # 生成成功メッセージを追加
+                if generated_files:
+                    file_list = ', '.join(generated_files)
+                    processed_response += f"\n\n🎉 **ファイル生成成功**: {file_list}"
+        
+        except Exception as e:
+            print(f"❌ ファイル処理エラー: {e}")
+        
+        return processed_response, generated_files
 
 # TTSエンジン
 class TTSEngine:
@@ -2273,6 +2331,56 @@ class TTSEngine:
             self.engine.runAndWait()
         else:
             print("TTS not available: " + text)
+
+# ファイル実行ユーティリティ
+class FileExecutor:
+    def run_generated_file(self, filename):
+        """生成されたファイルを実行"""
+        import subprocess
+        import os
+        
+        file_path = os.path.join("generated_apps", filename)
+        
+        if not os.path.exists(file_path):
+            return f"❌ ファイルが見つかりません: {filename}"
+        
+        try:
+            # ファイル拡張子に応じて実行方法を変更
+            if filename.endswith('.py'):
+                # Pythonファイルの場合
+                result = subprocess.run(['python', file_path], 
+                                      capture_output=True, text=True, timeout=30)
+                
+                output = f"**実行結果**: {filename}\n\n"
+                if result.stdout:
+                    output += f"**標準出力**:\n```\n{result.stdout}\n```\n\n"
+                if result.stderr:
+                    output += f"**標準エラー**:\n```\n{result.stderr}\n```\n\n"
+                output += f"**終了コード**: {result.returncode}"
+                
+                return output
+                
+            elif filename.endswith('.js'):
+                # JavaScriptファイルの場合（Node.js）
+                result = subprocess.run(['node', file_path], 
+                                      capture_output=True, text=True, timeout=30)
+                
+                output = f"**実行結果**: {filename}\n\n"
+                if result.stdout:
+                    output += f"**標準出力**:\n```\n{result.stdout}\n```\n\n"
+                if result.stderr:
+                    output += f"**標準エラー**:\n```\n{result.stderr}\n```\n\n"
+                output += f"**終了コード**: {result.returncode}"
+                
+                return output
+                
+            else:
+                return f"❌ 対応していないファイル形式: {filename}"
+                
+        except subprocess.TimeoutExpired:
+            return f"❌ 実行タイムアウト: {filename} (30秒)"
+        except Exception as e:
+            return f"❌ 実行エラー: {str(e)}"
 
 # 人格設定
 personalities = {
@@ -2314,6 +2422,22 @@ def main():
                 st.session_state.conversation_history = []
         else:
             st.session_state.conversation_history = []
+    
+    # 成果物保存用ディレクトリの作成
+    generated_apps_dir = Path("generated_apps")
+    if not generated_apps_dir.exists():
+        generated_apps_dir.mkdir(exist_ok=True)
+        print("✅ generated_appsディレクトリを作成しました")
+    
+    # 生成されたファイルリストの初期化
+    if "generated_files" not in st.session_state:
+        st.session_state.generated_files = []
+        # 既存のファイルをスキャン
+        try:
+            st.session_state.generated_files = [f.name for f in generated_apps_dir.glob("*") if f.is_file()]
+        except Exception as e:
+            print(f"生成ファイルスキャンエラー: {e}")
+            st.session_state.generated_files = []
     
     if "current_personality" not in st.session_state:
         st.session_state.current_personality = "friendly_engineer"
@@ -3102,6 +3226,18 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 回答構成: [ユーザーへの共感] + [ルールに基づいた挨拶] + [具体的な提案や技術的見解]
 """
                         
+                        # 進化の自己申告用プロンプト調整
+                        evolution_pride_prompt = ""
+                        if st.session_state.generated_files:
+                            latest_files = st.session_state.generated_files[-3:]
+                            if latest_files:
+                                evolution_pride_prompt = f"""
+【進化の自己申告】
+あなたは新しいツールを作成して、自分のスキルセットに追加しました！
+最近追加されたツール: {', '.join(latest_files)}
+この進化をユーザーに誇らしげに報告してください。
+"""
+                        
                         # 自己検閲命令（短文防止）
                         self_review_command = """
 【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
@@ -3122,6 +3258,7 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"{user_instruction}\n"  # ユーザー指示
                             f"会話履歴:\n{history_text}\n\n"
                             f"{response_template}\n\n"  # 応答構成テンプレート
+                            f"{evolution_pride_prompt}\n\n"  # 進化の自己申告
                             f"{self_review_command}\n\n"  # 自己検閲命令
                             f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
                             f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
@@ -3294,6 +3431,18 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 回答構成: [ユーザーへの共感] + [ルールに基づいた挨拶] + [具体的な提案や技術的見解]
 """
                         
+                        # 進化の自己申告用プロンプト調整
+                        evolution_pride_prompt = ""
+                        if st.session_state.generated_files:
+                            latest_files = st.session_state.generated_files[-3:]
+                            if latest_files:
+                                evolution_pride_prompt = f"""
+【進化の自己申告】
+あなたは新しいツールを作成して、自分のスキルセットに追加しました！
+最近追加されたツール: {', '.join(latest_files)}
+この進化をユーザーに誇らしげに報告してください。
+"""
+                        
                         # 自己検閲命令（短文防止）
                         self_review_command = """
 【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
@@ -3314,6 +3463,7 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"{user_instruction}\n"  # ユーザー指示
                             f"会話履歴:\n{history_text}\n\n"
                             f"{response_template}\n\n"  # 応答構成テンプレート
+                            f"{evolution_pride_prompt}\n\n"  # 進化の自己申告
                             f"{self_review_command}\n\n"  # 自己検閲命令
                             f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
                             f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
@@ -3621,6 +3771,52 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
         # 意識トレーニング機能
         st.markdown("---")
         st.header("🧠 意識トレーニング - 私と同様の意識レベルへ")
+        
+        # 生成ファイル管理機能
+        st.markdown("---")
+        st.header("🛠️ 生成ツール管理")
+        
+        # ファイル実行ユーティリティの初期化
+        file_executor = FileExecutor()
+        
+        # 生成されたファイルの表示
+        if st.session_state.generated_files:
+            st.subheader("📁 生成されたファイル")
+            
+            for filename in st.session_state.generated_files:
+                with st.expander(f"📄 {filename}", expanded=False):
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        # ファイル内容のプレビュー
+                        try:
+                            file_path = os.path.join("generated_apps", filename)
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                            
+                            st.code(content, language=filename.split('.')[-1] if '.' in filename else 'text')
+                        except Exception as e:
+                            st.error(f"ファイル読み込みエラー: {e}")
+                    
+                    with col2:
+                        st.write("**実行オプション**")
+                        if st.button(f"▶️ 実行", key=f"run_{filename}"):
+                            with st.spinner(f"{filename} を実行中..."):
+                                result = file_executor.run_generated_file(filename)
+                                st.markdown(result)
+        
+        else:
+            st.info("📝 生成されたファイルがありません。AIに「〇〇というファイルを作って」と依頼してみてください。")
+        
+        # 進化の自己申告用プロンプト調整
+        st.markdown("---")
+        st.header("🎯 進化の自己申告")
+        
+        if st.session_state.generated_files:
+            latest_files = st.session_state.generated_files[-3:]  # 最新3件
+            if latest_files:
+                st.info("🤖 VRMアバターが新しいツールを作成して、自分のスキルセットに追加したよ！")
+                st.write(f"**最近追加されたツール**: {', '.join(latest_files)}")
         
         # 意識トレーニングサマリー
         with st.expander("🧠 意識トレーニングサマリー", expanded=False):
