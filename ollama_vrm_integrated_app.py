@@ -2244,10 +2244,14 @@ class OllamaClient:
                 print("✅ AI応答生成成功: " + str(len(ai_response)) + " 文字")
                 
                 # ファイル書き出しアクションの処理
-                processed_response, generated_files = self._process_file_generation(ai_response)
+                progress_placeholder = st.empty()
+                progress_placeholder.info("🤖 新しい知識をインストール中... 0%")
+                
+                processed_response, generated_files = self._process_file_generation(ai_response, progress_placeholder)
                 if generated_files:
                     print(f"✅ ファイル生成成功: {generated_files}")
                 
+                progress_placeholder.empty()
                 return processed_response
             else:
                 print("❌ Ollama APIエラー: " + str(response.status_code))
@@ -2264,10 +2268,11 @@ class OllamaClient:
             print("❌ Ollama APIエラー: " + str(e))
             return "AI応答の生成に失敗しました: " + str(e)
 
-    def _process_file_generation(self, response):
+    def _process_file_generation(self, response, progress_placeholder=None):
         """AI応答内のファイル生成タグを処理"""
         import re
         import os
+        import time
         
         generated_files = []
         processed_response = response
@@ -2277,11 +2282,19 @@ class OllamaClient:
             file_pattern = r'\[WRITE_FILE:\s*([^\]]+)\](.*?)\[/WRITE_FILE\]'
             matches = re.findall(file_pattern, response, re.DOTALL)
             
-            for filename, content in matches:
+            total_files = len(matches)
+            
+            for i, (filename, content) in enumerate(matches):
                 filename = filename.strip()
                 content = content.strip()
                 
                 if filename and content:
+                    # 進捗更新
+                    if progress_placeholder:
+                        progress = int((i + 1) / total_files * 100)
+                        progress_placeholder.info(f"🤖 新しい知識をインストール中... {progress}%")
+                        time.sleep(0.3)  # 進捗を見せるための少し待機
+                    
                     # generated_appsディレクトリに保存
                     file_path = os.path.join("generated_apps", filename)
                     
@@ -2433,12 +2446,55 @@ def main():
     if "generated_files" not in st.session_state:
         st.session_state.generated_files = []
         # 既存のファイルをスキャン
-        try:
-            st.session_state.generated_files = [f.name for f in generated_apps_dir.glob("*") if f.is_file()]
-        except Exception as e:
-            print(f"生成ファイルスキャンエラー: {e}")
-            st.session_state.generated_files = []
+        st.session_state.generated_files = scan_generated_apps()
+
+def scan_generated_apps():
+    """generated_appsディレクトリをスキャンしてPythonファイルリストを取得"""
+    generated_apps_dir = Path("generated_apps")
+    python_files = []
     
+    try:
+        if generated_apps_dir.exists():
+            python_files = [f.name for f in generated_apps_dir.glob("*.py") if f.is_file()]
+            print(f"✅ {len(python_files)}個のPythonファイルをスキャンしました")
+        else:
+            print("📁 generated_appsディレクトリが存在しません")
+    except Exception as e:
+        print(f"❌ ファイルスキャンエラー: {e}")
+    
+    return python_files
+
+def load_generated_app_module(filename):
+    """生成されたPythonアプリを動的にインポート"""
+    import importlib.util
+    import sys
+    import os
+    
+    file_path = os.path.join("generated_apps", filename)
+    
+    if not os.path.exists(file_path):
+        return None, f"ファイルが見つかりません: {filename}"
+    
+    try:
+        # モジュール名をファイル名から生成（拡張子を除く）
+        module_name = filename.replace('.py', '')
+        
+        # モジュールの動的読み込み
+        spec = importlib.util.spec_from_file_location(module_name, file_path)
+        if spec is None:
+            return None, f"モジュール仕様の作成に失敗: {filename}"
+        
+        module = importlib.util.module_from_spec(spec)
+        
+        # モジュールをsys.modulesに追加してインポート
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        
+        return module, "モジュール読み込み成功"
+        
+    except Exception as e:
+        return None, f"モジュール読み込みエラー: {str(e)}"
+
     if "current_personality" not in st.session_state:
         st.session_state.current_personality = "friendly_engineer"
     if "ollama" not in st.session_state:
@@ -2503,6 +2559,50 @@ def main():
             index=list(personality_options.keys()).index(personalities[st.session_state.current_personality]["name"])
         )
         st.session_state.current_personality = personality_options[selected_personality_name]
+        
+        # 拡張スキル（生成済みアプリ）
+        st.markdown("---")
+        st.subheader("🛠️ 拡張スキル（生成済みアプリ）")
+        
+        # 生成済みアプリをスキャン
+        python_files = scan_generated_apps()
+        
+        if python_files:
+            st.write("**利用可能なスキル**:")
+            for filename in python_files:
+                # ファイル名から表示名を生成（.pyを除き、アンダースコアをスペースに）
+                display_name = filename.replace('.py', '').replace('_', ' ').title()
+                
+                if st.button(f"⚡ {display_name}", key=f"app_{filename}"):
+                    # アプリを動的にインポートして実行
+                    module, message = load_generated_app_module(filename)
+                    
+                    if module:
+                        st.success(f"✅ {display_name} を読み込みました")
+                        
+                        # モジュール内の関数を検索して実行
+                        if hasattr(module, 'main'):
+                            try:
+                                with st.expander(f"🚀 {display_name} の実行結果", expanded=True):
+                                    module.main()
+                            except Exception as e:
+                                st.error(f"❌ 実行エラー: {str(e)}")
+                        elif hasattr(module, 'run'):
+                            try:
+                                with st.expander(f"🚀 {display_name} の実行結果", expanded=True):
+                                    module.run()
+                            except Exception as e:
+                                st.error(f"❌ 実行エラー: {str(e)}")
+                        else:
+                            st.info(f"ℹ️ {display_name} には実行可能な関数が見つかりませんでした")
+                            # 利用可能な関数を表示
+                            functions = [attr for attr in dir(module) if callable(getattr(module, attr)) and not attr.startswith('_')]
+                            if functions:
+                                st.write(f"利用可能な関数: {', '.join(functions)}")
+                    else:
+                        st.error(f"❌ {display_name} の読み込みに失敗しました: {message}")
+        else:
+            st.info("📝 生成済みのアプリがありません。AIに「〇〇というアプリを作って」と依頼してください。")
         
         # ファイル・フォルダ管理
         st.markdown("---")
