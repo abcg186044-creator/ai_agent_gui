@@ -189,14 +189,17 @@ class VRMAvatarController:
             return {"action": "show", "message": "VRMアバターを表示しました。"}
         
         elif action == "scale":
-            return {"action": "scale", "value": command["value"], "message": f"VRMアバターを{command['value']}倍に拡大縮小しました。"}
+            scale_message = Template("VRMアバターを${value}倍に拡大縮小しました。")
+            return {"action": "scale", "value": command["value"], "message": scale_message.substitute(value=command['value'])}
         
         elif action == "rotation":
-            return {"action": "rotation", "value": command["value"], "message": f"VRMアバターを{command['value']}度回転させました。"}
+            rotation_message = Template("VRMアバターを${value}度回転させました。")
+            return {"action": "rotation", "value": command["value"], "message": rotation_message.substitute(value=command['value'])}
         
         elif action == "expression":
             expression = command.get("value", "happy")
-            return {"action": "expression", "value": expression, "message": f"VRMアバターの表情を{expression}に変更しました。"}
+            expression_message = Template("VRMアバターの表情を${expression}に変更しました。")
+            return {"action": "expression", "value": expression, "message": expression_message.substitute(expression=expression)}
         
         return {"action": "unknown", "message": "VRMコマンドを実行しました。"}
     
@@ -2303,15 +2306,17 @@ def main():
         st.session_state.vrm_rotation = 0
     if "vrm_expression" not in st.session_state:
         st.session_state.vrm_expression = "neutral"
+    
+    # VRMコントローラーの初期化（VRM制御状態の初期化後）
     if "vrm_controller" not in st.session_state:
         st.session_state.vrm_controller = VRMAvatarController()
     
     # 自己進化エージェントの初期化
     if "evolution_agent" not in st.session_state:
         st.session_state.evolution_agent = SelfEvolvingAgent()
-        # VRMデータをロード
+        # VRMデータをロード（アバター表示時のみ）
         vrm_controller = st.session_state.vrm_controller
-        if vrm_controller.vrm_path:
+        if vrm_controller.vrm_path and st.session_state.vrm_visible:
             st.session_state.evolution_agent.load_vrm_data(vrm_controller.vrm_path)
     
     # 多言語プログラミングサポートの初期化
@@ -2321,9 +2326,9 @@ def main():
     # AIに近い自己進化エージェントの初期化
     if "ai_evolution_agent" not in st.session_state:
         st.session_state.ai_evolution_agent = AISelfEvolvingAgent()
-        # VRMデータをロード
+        # VRMデータをロード（アバター表示時のみ）
         vrm_controller = st.session_state.vrm_controller
-        if vrm_controller.vrm_path:
+        if vrm_controller.vrm_path and st.session_state.vrm_visible:
             st.session_state.ai_evolution_agent.load_vrm_data(vrm_controller.vrm_path)
         # 意識トレーニングデータをロード
         st.session_state.ai_evolution_agent.load_consciousness_training_data()
@@ -2437,7 +2442,7 @@ def main():
                             new_file_name += '.py'
                         new_file = Path(new_file_name.strip())
                         if not new_file.exists():
-                            python_content = f'''# {new_file_name}
+                            python_template = Template("""# ${filename}
 # 自動生成されたPythonファイル
 
 def main():
@@ -2445,7 +2450,8 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
+""")
+                            python_content = python_template.substitute(filename=new_file_name)
                             new_file.write_text(python_content, encoding='utf-8')
                             st.success(f"✅ Pythonファイル `{new_file_name}` を作成しました")
                             st.rerun()
@@ -2953,8 +2959,18 @@ if __name__ == "__main__":
                         for conv in conversation_history:
                             history_text += f"User: {conv['user']}\nAssistant: {conv['assistant']}\n"
                         
-                        # プロンプト構築
-                        prompt = (current_personality['prompt'] + "\n\n" + 
+                        # プロンプト構築（アバター状態に応じて調整）
+                        base_prompt = current_personality['prompt']
+                        if not st.session_state.vrm_visible:
+                            # アバター非表示時の対話肉付けプロンプト
+                            enhanced_prompt = base_prompt + "\n\n" + \
+                                "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。" + \
+                                "簡潔すぎる応答を避け、ユーザーの意図を汲み取った親しみやすい文章を生成してください。" + \
+                                "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。"
+                        else:
+                            enhanced_prompt = base_prompt
+                        
+                        prompt = (enhanced_prompt + "\n\n" + 
                                  "以下のユーザーの入力に対して、人格に応じて自然に応答してください。\n\n" +
                                  "ユーザー入力: " + st.session_state.recognized_text + "\n\n" +
                                  history_text + "\n\nAssistant:")
@@ -3052,8 +3068,18 @@ if __name__ == "__main__":
                         for conv in conversation_history:
                             history_text += f"User: {conv['user']}\nAssistant: {conv['assistant']}\n"
                         
-                        # プロンプト構築
-                        prompt = (current_personality['prompt'] + "\n\n" + 
+                        # プロンプト構築（アバター状態に応じて調整）
+                        base_prompt = current_personality['prompt']
+                        if not st.session_state.vrm_visible:
+                            # アバター非表示時の対話肉付けプロンプト
+                            enhanced_prompt = base_prompt + "\n\n" + \
+                                "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。" + \
+                                "簡潔すぎる応答を避け、ユーザーの意図を汲み取った親しみやすい文章を生成してください。" + \
+                                "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。"
+                        else:
+                            enhanced_prompt = base_prompt
+                        
+                        prompt = (enhanced_prompt + "\n\n" + 
                                  "以下のユーザーの入力に対して、人格に応じて自然に応答してください。\n\n" +
                                  "ユーザー入力: " + st.session_state.recognized_text + "\n\n" +
                                  history_text + "\n\nAssistant:")
@@ -3118,15 +3144,17 @@ if __name__ == "__main__":
     with col2:
         st.header("🎭 VRMアバター")
         
-        # VRMアバター表示
+        # VRMアバター表示（条件付き）
         vrm_controller = st.session_state.vrm_controller
-        if vrm_controller.vrm_path:
+        if st.session_state.vrm_visible and vrm_controller.vrm_path:
             vrm_html = vrm_controller.get_vrm_html(
                 vrm_scale=st.session_state.vrm_scale,
                 vrm_rotation=st.session_state.vrm_rotation,
                 vrm_expression=st.session_state.vrm_expression
             )
             st.components.v1.html(vrm_html, height=600)
+        elif not st.session_state.vrm_visible:
+            st.info("🎭 アバターは非表示になっています。対話に集中できます。")
         else:
             st.error("❌ VRMファイルが見つかりません")
         

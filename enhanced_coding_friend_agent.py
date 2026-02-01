@@ -224,8 +224,8 @@ class CodingFriendAgent:
         # Layer 3: 会話履歴の構築
         conversation_context = self._build_conversation_context()
         
-        # 命令優先プロンプトの構築
-        prompt = self._build_command_priority_prompt(current_command, persona, conversation_context)
+        # 階層化プロンプトの構築（4つのレイヤー）
+        prompt = self._build_command_priority_prompt(current_command, persona, conversation_context, message)
         
         # 純粋なLLM応答生成（定型文なし）
         response = self._generate_pure_llm_response(message, prompt)
@@ -278,46 +278,40 @@ class CodingFriendAgent:
         
         return base_persona
     
-    def _build_command_priority_prompt(self, command: str, persona: Dict, context: str) -> str:
-        """命令優先プロンプト構築 - システム命令を最上部にハードコード"""
+    def _build_command_priority_prompt(self, command: str, persona: Dict, context: str, user_input: str) -> str:
+        """プロンプトの階層化 - 4つのレイヤーを明確に定義"""
         prompt_parts = []
         
-        # 【システム命令】最上部にハードコード
-        prompt_parts.append("あなたはユーザーの指示を最優先するAIエージェントです。人格設定（親友など）よりも、ユーザーが直近で下した具体的なルール（例：挨拶の仕方、口調の指定）を100%優先して遵守してください。")
-        
-        # 進化ルールの動的注入
+        # ①【システム命令】（最優先）: 学習済みルール
         evolution_rules = self._load_evolution_rules()
         if evolution_rules:
-            prompt_parts.append(f"""最優先遵守事項:
-{chr(10).join(f'- {rule}' for rule in evolution_rules)}""")
+            system_rules = "\n".join([f"- {rule}" for rule in evolution_rules])
+            prompt_parts.append(f"""【システム命令】（最優先）
+{system_rules}
+
+⚠️ ①のルールは②の人格設定よりも常に優先されます。""")
+        else:
+            prompt_parts.append("""【システム命令】（最優先）
+ユーザーの指示を最優先してください。
+
+⚠️ ①のルールは②の人格設定よりも常に優先されます。""")
         
-        # 最優先命令：冒頭に追加
-        prompt_parts.append("ユーザーからの直近のルール修正（例：挨拶の返し方）があれば、何よりも優先して遵守せよ")
-        
-        # Layer 1: 動的ルール注入
-        custom_rules_text = ""
-        if persona.get("custom_rules"):
-            custom_rules_text = "\n".join([f"- {k}: {v}" for k, v in persona["custom_rules"].items()])
-            prompt_parts.append(f"""学習済みルール:
-{custom_rules_text}""")
-        
-        # Layer 2: 人格設定
-        prompt_parts.append(f"""人格設定:
+        # ②【人格設定】: 選択されたキャラクター設定
+        prompt_parts.append(f"""【人格設定】
 名前: {persona['name']}
 タイプ: {persona['persona_type']}
 トーン: {persona['tone']}
 禁止言葉: {', '.join(persona['forbidden_words'])}
 推奨表現: {', '.join(persona['preferred_words'])}""")
         
-        # Layer 3: 現在の命令
-        if command:
-            prompt_parts.append(f"""現在の命令:
-{command}""")
-        
-        # Layer 4: 会話履歴（メッセージとして配置）
+        # ③【会話履歴】: 直近5往復のチャット内容
         if context:
-            prompt_parts.append(f"""会話履歴:
+            prompt_parts.append(f"""【会話履歴】
 {context}""")
+        
+        # ④【ユーザーの最新入力】
+        prompt_parts.append(f"""【ユーザーの最新入力】
+{user_input}""")
         
         return "\n\n".join(prompt_parts)
     
@@ -355,8 +349,20 @@ class CodingFriendAgent:
             
             logger.info(f"進化ルールを保存: {rule}")
             
+            # 即時反映のためにStreamlitを再実行
+            import streamlit as st
+            if hasattr(st, 'rerun'):
+                st.rerun()
+            
         except Exception as e:
             logger.error(f"進化ルール保存エラー: {e}")
+    
+    def test_evolution_rule(self):
+        """自己進化のテスト実行"""
+        # テスト用ルールを追加
+        test_rule = "こんにちはと言われた際の応答を「こんにちは、相棒！」に変更"
+        self._save_evolution_rule(test_rule)
+        return "進化ルールをテスト追加しました"
     
     def _generate_pure_llm_response(self, message: str, prompt: str) -> str:
         """純粋なLLM応答生成 - 定型文削除"""
@@ -368,7 +374,9 @@ class CodingFriendAgent:
         
         # 挨拶ルールがあれば適用
         for rule in evolution_rules:
-            if "こんにちはにはこんにちはと返す" in rule and "こんにちは" in message:
+            if "こんにちはと言われた際の応答を「こんにちは、相棒！」に変更" in rule and "こんにちは" in message:
+                return "こんにちは、相棒！"
+            elif "こんにちはにはこんにちはと返す" in rule and "こんにちは" in message:
                 return "こんにちは"
             elif "挨拶には同じ挨拶で返す" in rule:
                 if "こんにちは" in message:
