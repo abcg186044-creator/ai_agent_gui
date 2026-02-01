@@ -9,9 +9,88 @@ import datetime
 from pathlib import Path
 from ..core.constants import *
 from ..core.file_map import file_resolver, get_relevant_files, should_load_file
+from .import_validator import import_error_detector, auto_import_fixer
 
 # ファイルキャッシュ（パフォーマンス向上）
 _file_cache = {}
+
+def safe_function_call(module_path: str, function_name: str, *args, **kwargs):
+    """安全な関数呼び出し with インポート不足検知"""
+    try:
+        # モジュールを動的にインポート
+        module = __import__(module_path, fromlist=[function_name])
+        func = getattr(module, function_name)
+        return func(*args, **kwargs)
+        
+    except AttributeError as e:
+        # AttributeErrorを検知して自動修正を試みる
+        error_info = import_error_detector.analyze_error(str(e))
+        
+        if error_info['error_type'] != 'unknown':
+            print(f"🔍 インポート不足を検知: {error_info}")
+            
+            # 呼び出し元ファイルを特定して自動修正
+            caller_file = _get_caller_file()
+            if caller_file:
+                print("🔧 インポートを自動修正中...")
+                fix_result = auto_import_fixer.fix_import_error(error_info, caller_file)
+                
+                if fix_result['success']:
+                    print(f"✅ {fix_result['message']}")
+                    
+                    # 修正を検証
+                    validation = auto_import_fixer.validate_import_fix(caller_file)
+                    if validation['success']:
+                        print("✅ インポート修正を検証しました")
+                        # 再度関数呼び出しを試行
+                        module = __import__(module_path, fromlist=[function_name])
+                        func = getattr(module, function_name)
+                        return func(*args, **kwargs)
+                    else:
+                        print(f"❌ 検証失敗: {validation['error']}")
+                else:
+                    print(f"❌ 自動修正失敗: {fix_result['error']}")
+        
+        raise e
+        
+    except ImportError as e:
+        # ImportErrorを検知して自動修正を試みる
+        error_info = import_error_detector.analyze_error(str(e))
+        
+        if error_info['error_type'] != 'unknown':
+            print(f"🔍 ImportErrorを検知: {error_info}")
+            
+            caller_file = _get_caller_file()
+            if caller_file:
+                print("🔧 ImportErrorを自動修正中...")
+                fix_result = auto_import_fixer.fix_import_error(error_info, caller_file)
+                
+                if fix_result['success']:
+                    print(f"✅ {fix_result['message']}")
+                    # 再度インポートを試行
+                    module = __import__(module_path, fromlist=[function_name])
+                    func = getattr(module, function_name)
+                    return func(*args, **kwargs)
+        
+        raise e
+    
+    except Exception as e:
+        print(f"❌ 関数呼び出しエラー: {str(e)}")
+        raise e
+
+def _get_caller_file():
+    """呼び出し元ファイルを取得"""
+    import inspect
+    frame = inspect.currentframe()
+    try:
+        # 呼び出し元を遡ってファイルを特定
+        for _ in range(3):  # 3階層遡る
+            frame = frame.f_back
+            if frame and frame.f_code.co_filename:
+                return frame.f_code.co_filename
+    finally:
+        del frame
+    return None
 
 def load_file_with_cache(file_path: str, user_request: str = None) -> str:
     """キャッシュ付きファイル読み込み"""

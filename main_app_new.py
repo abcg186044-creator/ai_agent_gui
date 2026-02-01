@@ -77,6 +77,24 @@ def bootstrap_recovery():
 
 def main():
     """メイン関数"""
+    # 循環参照チェックを実行
+    from services.import_validator import circular_dependency_checker
+    
+    circular_check = circular_dependency_checker.check_circular_dependencies()
+    if circular_check['has_circular']:
+        st.error("⚠️ 循環参照が検出されました")
+        st.error(circular_check['message'])
+        
+        for dep in circular_check['circular_dependencies']:
+            st.error(f"循環: {' → '.join(dep)}")
+        
+        suggestions = circular_dependency_checker.suggest_dependency_fixes()
+        st.info("💡 修正提案:")
+        for suggestion in suggestions:
+            st.caption(f"• {suggestion}")
+        
+        st.stop()
+    
     # ブートストラップ・リカバリ
     if not bootstrap_recovery():
         print("❌ ブートストラップ・リカバリに失敗しました")
