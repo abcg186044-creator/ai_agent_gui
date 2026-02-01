@@ -6,6 +6,7 @@ Ollamaとの通信、プロンプト構築、自己進化ロジックを管理
 import re
 import json
 import os
+import streamlit as st
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from core.constants import *

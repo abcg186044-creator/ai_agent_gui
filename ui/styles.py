@@ -3,6 +3,7 @@ UIスタイルモジュール
 LINE風CSSやテーマ設定（ベージュ・茶色）を管理
 """
 
+import streamlit as st
 from ui.constants import UI_COLORS, UI_STYLES, COMPONENT_STYLES, THEMES
 
 def get_gliding_mode_css():
