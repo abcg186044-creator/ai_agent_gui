@@ -20,6 +20,10 @@ from ui.styles import apply_custom_css, get_ui_consistency_prompt
 from ui.components import render_line_chat, render_tool_panel, render_vrm_controls
 from services.state_manager import save_workspace_state, load_workspace_state, save_conversation_history, load_conversation_history
 from services.app_generator import MultiLanguageCodeGenerator, scan_generated_apps
+from services.import_sync import import_synchronizer, module_validator
+from services.backup_manager import backup_manager
+from core.file_map import resolve_target_file, get_relevant_files
+from core.self_optimizer import evolution_logger
 
 def initialize_session_state():
     """セッション状態を初期化"""

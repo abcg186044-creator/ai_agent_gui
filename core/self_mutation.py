@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
-from constants import *
+from core.constants import *
 
 class ModularSelfMutationManager:
     def __init__(self):
