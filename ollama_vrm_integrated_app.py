@@ -2339,9 +2339,17 @@ class OllamaClient:
                                 progress_placeholder.empty()
                                 st.markdown(self_reconstruction_ceremony(), unsafe_allow_html=True)
                                 time.sleep(3)  # 演出時間
+                                time.sleep(0.5)  # ファイルシステムが変更を確定させる時間
+                            
+                            # 進化のログ記録
+                            log_evolution_history(modification, message)
                             
                         else:
                             print(f"❌ 自己修正失敗: {message}")
+                            # 失敗時の自動ロールバック
+                            if backup_file:
+                                restore_from_backup(backup_file)
+                                print("🔄 自動ロールバックを実行しました")
                     
                     except Exception as e:
                         print(f"❌ 自己修正エラー: {e}")
@@ -2652,6 +2660,61 @@ st.markdown('''
             
             success_message = "ダークモードを適用しました"
         
+        elif "エゾモモンガ" in patch_description or "ベージュ" in patch_description:
+            # エゾモモンガ仕様の温かみのある配色
+            ezomomonga_css = """
+st.markdown('''
+<style>
+    .stApp {
+        background-color: #F5F5DC;
+        color: #5D4037;
+    }
+    .stTextInput > div > div > input {
+        background-color: #FAFAFA;
+        color: #5D4037;
+        border: 1px solid #8B4513;
+    }
+    .stButton > button {
+        background-color: #8B4513;
+        color: #FFFFFF;
+        border: none;
+    }
+    .stButton > button:hover {
+        background-color: #A0522D;
+    }
+    .css-1d391kg, .css-1lcbmhc {
+        background-color: #F5F5DC;
+    }
+    .css-1d391kg .css-17eq0hr, .css-1lcbmhc .css-17eq0hr {
+        background-color: #FAFAFA;
+        border: 1px solid #8B4513;
+    }
+    .stSelectbox > div > div > select {
+        background-color: #FAFAFA;
+        color: #5D4037;
+        border: 1px solid #8B4513;
+    }
+    .stSidebar .css-17eq0hr {
+        background-color: #FAFAFA;
+        border-left: 4px solid #8B4513;
+    }
+</style>
+''', unsafe_allow_html=True)
+"""
+            # 既存のCSSセクションを探して追加
+            if "st.markdown('<style>" in source_code:
+                modified_code = re.sub(
+                    r"(st\.markdown\('<style>.*?</style>', unsafe_allow_html=True\))",
+                    ezomomonga_css + r"\1",
+                    modified_code,
+                    flags=re.DOTALL
+                )
+            else:
+                # 新しくCSSセクションを追加
+                modified_code += f"\n\n{ezomomonga_css}"
+            
+            success_message = "UIをエゾモモンガ仕様の温かみのある配色に変更しました"
+        
         elif "サイドバーを右側" in patch_description:
             # サイドバーを右側に移動するロジック（これはStreamlitの制限により擬似的な実装）
             sidebar_move_code = """
@@ -2740,6 +2803,94 @@ def {target_function}(self):
     except Exception as e:
         return False, f"コード適用エラー: {str(e)}"
 
+def log_evolution_history(modification, message):
+    """進化の歴史を記録"""
+    try:
+        import json
+        from datetime import datetime
+        
+        # evolution_rules.jsonを読み込み
+        evolution_file = "personalities_custom.json"
+        evolution_data = {}
+        
+        if os.path.exists(evolution_file):
+            with open(evolution_file, "r", encoding="utf-8") as f:
+                evolution_data = json.load(f)
+        
+        # 進化履歴を初期化
+        if "evolution_history" not in evolution_data:
+            evolution_data["evolution_history"] = []
+        
+        # 新しい進化履歴を追加
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        evolution_entry = {
+            "timestamp": timestamp,
+            "modification": modification,
+            "result": message,
+            "type": "self_modification"
+        }
+        
+        evolution_data["evolution_history"].append(evolution_entry)
+        
+        # 最新10件のみ保持
+        if len(evolution_data["evolution_history"]) > 10:
+            evolution_data["evolution_history"] = evolution_data["evolution_history"][-10:]
+        
+        # 保存
+        with open(evolution_file, "w", encoding="utf-8") as f:
+            json.dump(evolution_data, f, ensure_ascii=False, indent=2)
+        
+        print(f"✅ 進化履歴を記録: {modification}")
+        
+    except Exception as e:
+        print(f"❌ 進化履歴記録エラー: {e}")
+
+def bootstrap_recovery():
+    """ブートストラップ・リカバリ - 起動時の自己修復"""
+    try:
+        import sys
+        import traceback
+        
+        # 現在のファイルの構文をチェック
+        current_file = __file__
+        
+        try:
+            with open(current_file, 'r', encoding='utf-8') as f:
+                source_code = f.read()
+            
+            # 構文チェック
+            compile(source_code, current_file, 'exec')
+            print("✅ 起動時構文チェック: 正常")
+            return True
+            
+        except SyntaxError as e:
+            print(f"❌ 起動時構文エラー検出: {e}")
+            
+            # 最新のバックアップを探す
+            backup_dir = Path("backups")
+            if backup_dir.exists():
+                backup_files = list(backup_dir.glob("app_bak_*.py"))
+                if backup_files:
+                    # 最新のバックアップを取得
+                    latest_backup = max(backup_files, key=lambda x: x.stat().st_mtime)
+                    
+                    print(f"🔄 バックアップから復元中: {latest_backup}")
+                    if restore_from_backup(str(latest_backup)):
+                        print("✅ ブートストラップ・リカバリ成功")
+                        return True
+                    else:
+                        print("❌ バックアップ復元失敗")
+                else:
+                    print("❌ バックアップファイルが見つかりません")
+            else:
+                print("❌ バックアップディレクトリが存在しません")
+        
+        return False
+        
+    except Exception as e:
+        print(f"❌ ブートストラップ・リカバリエラー: {e}")
+        return False
+
 def self_reconstruction_ceremony():
     """進化の儀式 - UI演出"""
     ceremony_css = """
@@ -2794,6 +2945,10 @@ def self_reconstruction_ceremony():
 """
     
     return ceremony_css
+
+    # 起動時にブートストラップ・リカバリを実行
+    if not bootstrap_recovery():
+        print("⚠️ 起動時リカバリに問題があります")
 
     if "current_personality" not in st.session_state:
         st.session_state.current_personality = "friendly_engineer"
@@ -3035,8 +3190,12 @@ Assistant: VRMアバターの表情変更、面白いですね！表情制御は
 
 対応可能な変更例：
 - "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
+- "エゾモモンガ仕様にして" → [SELF_MODIFY: エゾモモンガ仕様の温かみのある配色に変更]
 - "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
 - "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
+
+特別なUIテーマ：
+- エゾモモンガ仕様：背景色#F5F5DC（ベージュ）、アクセント#8B4513（茶色）
 
 """
                         
@@ -4053,8 +4212,12 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 
 対応可能な変更例：
 - "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
+- "エゾモモンガ仕様にして" → [SELF_MODIFY: エゾモモンガ仕様の温かみのある配色に変更]
 - "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
 - "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
+
+特別なUIテーマ：
+- エゾモモンガ仕様：背景色#F5F5DC（ベージュ）、アクセント#8B4513（茶色）
 
 """
                         
@@ -4285,8 +4448,12 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 
 対応可能な変更例：
 - "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
+- "エゾモモンガ仕様にして" → [SELF_MODIFY: エゾモモンガ仕様の温かみのある配色に変更]
 - "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
 - "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
+
+特別なUIテーマ：
+- エゾモモンガ仕様：背景色#F5F5DC（ベージュ）、アクセント#8B4513（茶色）
 
 """
                         
