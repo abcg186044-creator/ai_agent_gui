@@ -2837,6 +2837,55 @@ st.markdown('''
         font-size: 11px;
         color: #4CAF50;
         margin-left: 5px;
+        opacity: 0;
+        animation: readFadeIn 0.5s ease-in-out 0.3s forwards;
+    }
+    
+    @keyframes readFadeIn {
+        0% {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+        50% {
+            opacity: 1;
+            transform: translateX(2px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    /* VRMアバター既読演出 */
+    .vrm-read-animation {
+        position: relative;
+        animation: vrmReadPulse 1s ease-in-out;
+    }
+    
+    @keyframes vrmReadPulse {
+        0%, 100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.1);
+            filter: brightness(1.2);
+        }
+    }
+    
+    /* メッセージ送信時の演出 */
+    .message-sending {
+        animation: messageSend 0.3s ease-out;
+    }
+    
+    @keyframes messageSend {
+        0% {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 </style>
 ''', unsafe_allow_html=True)
@@ -3125,6 +3174,53 @@ def bootstrap_recovery():
         print(f"❌ ブートストラップ・リカバリエラー: {e}")
         return False
 
+def cleanup_conversation_history():
+    """会話履歴のクリーンアップとアーカイブ"""
+    try:
+        import json
+        from datetime import datetime
+        
+        conversation_history = st.session_state.conversation_history
+        
+        if len(conversation_history) > 20:
+            # アーカイブ用のディレクトリを作成
+            archive_dir = Path("data/archive")
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 古い履歴をアーカイブ
+            old_history = conversation_history[:-20]
+            new_history = conversation_history[-20:]
+            
+            # アーカイブファイル名（タイムスタンプ付き）
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            archive_file = archive_dir / f"conversation_archive_{timestamp}.json"
+            
+            # アーカイブを保存
+            archive_data = {
+                "timestamp": timestamp,
+                "archived_count": len(old_history),
+                "conversations": old_history
+            }
+            
+            with open(archive_file, "w", encoding="utf-8") as f:
+                json.dump(archive_data, f, ensure_ascii=False, indent=2)
+            
+            # セッション状態を更新
+            st.session_state.conversation_history = new_history
+            
+            print(f"✅ 会話履歴をアーカイブ: {len(old_history)}件 → {archive_file}")
+            
+            # アーカイブファイルが多すぎる場合は古いものを削除
+            archive_files = list(archive_dir.glob("conversation_archive_*.json"))
+            if len(archive_files) > 10:
+                archive_files.sort(key=lambda x: x.stat().st_mtime)
+                for old_file in archive_files[:-10]:
+                    old_file.unlink()
+                    print(f"🗑️ 古いアーカイブを削除: {old_file}")
+    
+    except Exception as e:
+        print(f"❌ 履歴クリーンアップエラー: {e}")
+
 def render_line_chat(conversation_history):
     """LINE風チャットUIを描画"""
     import datetime
@@ -3154,7 +3250,7 @@ def render_line_chat(conversation_history):
         </div>
         ''', unsafe_allow_html=True)
         
-        # AIメッセージ（エゾモモンガ）
+        # AIメッセージ（エゾモモンガ）- HTMLウィジェットを許可
         st.markdown(f'''
         <div class="chat-message ai-message">
             <div class="message-avatar ai-avatar">🐿️</div>
@@ -3172,21 +3268,37 @@ def render_line_chat(conversation_history):
     # 自動スクロール用JavaScript
     st.markdown("""
     <script>
-    // メッセージが更新されるたびに最下部へスクロール
+    // メッセージが更新されるたびに最下部へスクロール（遅延付き）
     setTimeout(function() {
-        window.scrollTo(0, document.body.scrollHeight);
+        window.scrollTo({
+            top: document.body.scrollHeight,
+            behavior: 'smooth'
+        });
     }, 100);
     
     // 追加：DOM変更を監視して自動スクロール
     const observer = new MutationObserver(function(mutations) {
         setTimeout(function() {
-            window.scrollTo(0, document.body.scrollHeight);
-        }, 50);
+            window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 100);
     });
     
     observer.observe(document.body, {
         childList: true,
         subtree: true
+    });
+    
+    // 追加：ページ読み込み完了時にもスクロール
+    window.addEventListener('load', function() {
+        setTimeout(function() {
+            window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 200);
     });
     </script>
     """, unsafe_allow_html=True)
@@ -5488,6 +5600,9 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
             }
             </style>
             """, unsafe_allow_html=True)
+            
+            # 履歴ローテーション（最新20件を保持）
+            cleanup_conversation_history()
             
             # 最新の会話履歴を表示
             recent_messages = st.session_state.conversation_history[-20:]  # 最新20件を表示
