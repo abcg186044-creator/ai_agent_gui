@@ -8,6 +8,312 @@ import re
 import importlib.util
 from pathlib import Path
 from ..core.constants import *
+from .backup_manager import backup_manager
+
+class CodeExtractor:
+    """コード抽出クラス"""
+    
+    @staticmethod
+    def extract_functions(file_path: str, target_functions: List[str] = None) -> Dict:
+        """ファイルから関数を抽出"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            functions = {}
+            lines = content.split('\n')
+            
+            current_function = None
+            function_lines = []
+            indent_level = 0
+            
+            for line_num, line in enumerate(lines, 1):
+                # 関数定義を検出
+                func_match = re.match(r'^(\s*)def\s+(\w+)\s*\(', line)
+                if func_match:
+                    # 前の関数を保存
+                    if current_function:
+                        functions[current_function] = {
+                            'code': '\n'.join(function_lines),
+                            'start_line': function_start,
+                            'indent': indent_level
+                        }
+                    
+                    # 新しい関数を開始
+                    current_function = func_match.group(2)
+                    function_lines = [line]
+                    function_start = line_num
+                    indent_level = len(func_match.group(1))
+                    
+                    # ターゲット関数でない場合はスキップ
+                    if target_functions and current_function not in target_functions:
+                        current_function = None
+                        continue
+                elif current_function:
+                    # 関数の終了を検出（同じかより浅いインデント）
+                    current_indent = len(line) - len(line.lstrip())
+                    if line.strip() and current_indent <= indent_level and not line.strip().startswith('#'):
+                        functions[current_function] = {
+                            'code': '\n'.join(function_lines),
+                            'start_line': function_start,
+                            'indent': indent_level
+                        }
+                        current_function = None
+                        function_lines = []
+                    else:
+                        function_lines.append(line)
+            
+            # 最後の関数を保存
+            if current_function:
+                functions[current_function] = {
+                    'code': '\n'.join(function_lines),
+                    'start_line': function_start,
+                    'indent': indent_level
+                }
+            
+            return functions
+            
+        except Exception as e:
+            print(f"関数抽出エラー: {e}")
+            return {}
+    
+    @staticmethod
+    def extract_classes(file_path: str, target_classes: List[str] = None) -> Dict:
+        """ファイルからクラスを抽出"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            classes = {}
+            lines = content.split('\n')
+            
+            current_class = None
+            class_lines = []
+            class_indent = 0
+            
+            for line_num, line in enumerate(lines, 1):
+                # クラス定義を検出
+                class_match = re.match(r'^(\s*)class\s+(\w+)', line)
+                if class_match:
+                    # 前のクラスを保存
+                    if current_class:
+                        classes[current_class] = {
+                            'code': '\n'.join(class_lines),
+                            'start_line': class_start,
+                            'indent': class_indent
+                        }
+                    
+                    # 新しいクラスを開始
+                    current_class = class_match.group(2)
+                    class_lines = [line]
+                    class_start = line_num
+                    class_indent = len(class_match.group(1))
+                    
+                    # ターゲットクラスでない場合はスキップ
+                    if target_classes and current_class not in target_classes:
+                        current_class = None
+                        continue
+                elif current_class:
+                    # クラスの終了を検出
+                    current_indent = len(line) - len(line.lstrip())
+                    if line.strip() and current_indent <= class_indent and not line.strip().startswith('#'):
+                        classes[current_class] = {
+                            'code': '\n'.join(class_lines),
+                            'start_line': class_start,
+                            'indent': class_indent
+                        }
+                        current_class = None
+                        class_lines = []
+                    else:
+                        class_lines.append(line)
+            
+            # 最後のクラスを保存
+            if current_class:
+                classes[current_class] = {
+                    'code': '\n'.join(class_lines),
+                    'start_line': class_start,
+                    'indent': class_indent
+                }
+            
+            return classes
+            
+        except Exception as e:
+            print(f"クラス抽出エラー: {e}")
+            return {}
+    
+    @staticmethod
+    def extract_imports(file_path: str) -> List[str]:
+        """ファイルからimport文を抽出"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            imports = []
+            lines = content.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if line.startswith('import ') or line.startswith('from '):
+                    imports.append(line)
+            
+            return imports
+            
+        except Exception as e:
+            print(f"import抽出エラー: {e}")
+            return []
+
+class PartialMutationManager:
+    """局所的な自己書き換えマネージャー"""
+    
+    def __init__(self):
+        self.code_extractor = CodeExtractor()
+    
+    def apply_partial_mutation(self, file_path: str, new_code: str, target_function: str = None, target_class: str = None) -> Dict:
+        """指定されたファイルの一部のみを書き換え"""
+        try:
+            # バックアップを作成
+            backup_path = backup_manager.create_backup(file_path)
+            
+            if not backup_path:
+                return {
+                    "success": False,
+                    "error": "バックアップ作成に失敗しました"
+                }
+            
+            # ファイルを読み込み
+            with open(file_path, 'r', encoding='utf-8') as f:
+                original_content = f.read()
+            
+            # ターゲットを特定して置換
+            if target_function:
+                success, modified_content = self._replace_function(original_content, target_function, new_code)
+            elif target_class:
+                success, modified_content = self._replace_class(original_content, target_class, new_code)
+            else:
+                # ファイル全体に追加
+                modified_content = original_content + '\n\n' + new_code
+                success = True
+            
+            if success:
+                # 変更を保存
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(modified_content)
+                
+                return {
+                    "success": True,
+                    "backup_path": backup_path,
+                    "modified_content": modified_content,
+                    "message": f"{file_path} の一部を正常に書き換えました"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "ターゲットの置換に失敗しました",
+                    "backup_path": backup_path
+                }
+                
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"局所的書き換えエラー: {str(e)}"
+            }
+    
+    def _replace_function(self, content: str, function_name: str, new_code: str) -> tuple:
+        """関数を置換"""
+        try:
+            functions = self.code_extractor.extract_functions(content, [function_name])
+            
+            if function_name not in functions:
+                return False, content
+            
+            func_info = functions[function_name]
+            old_func_code = func_info['code']
+            
+            # 置換
+            modified_content = content.replace(old_func_code, new_code)
+            
+            return True, modified_content
+            
+        except Exception as e:
+            print(f"関数置換エラー: {e}")
+            return False, content
+    
+    def _replace_class(self, content: str, class_name: str, new_code: str) -> tuple:
+        """クラスを置換"""
+        try:
+            classes = self.code_extractor.extract_classes(content, [class_name])
+            
+            if class_name not in classes:
+                return False, content
+            
+            class_info = classes[class_name]
+            old_class_code = class_info['code']
+            
+            # 置換
+            modified_content = content.replace(old_class_code, new_code)
+            
+            return True, modified_content
+            
+        except Exception as e:
+            print(f"クラス置換エラー: {e}")
+            return False, content
+    
+    def generate_focused_prompt(self, file_path: str, user_request: str, target_function: str = None) -> str:
+        """修正が必要な部分のみを抽出して最適化されたプロンプトを生成"""
+        try:
+            # import文を取得
+            imports = self.code_extractor.extract_imports(file_path)
+            
+            # ターゲットコードを抽出
+            if target_function:
+                functions = self.code_extractor.extract_functions(file_path, [target_function])
+                target_code = functions.get(target_function, {}).get('code', '')
+                context_info = f"関数: {target_function}"
+            else:
+                # ファイル全体の先頭部分を取得
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                target_code = ''.join(lines[:50])  # 先頭50行
+                context_info = "ファイル先頭部分"
+            
+            # 最適化されたプロンプトを生成
+            prompt = f"""
+# コード修正タスク
+
+## ファイル情報
+- ファイルパス: {file_path}
+- 修正対象: {context_info}
+- ユーザー要求: {user_request}
+
+## 現在のコード
+```python
+# Import文
+{chr(10).join(imports)}
+
+# 修正対象コード
+{target_code}
+```
+
+## 修正指示
+以下の要件に従ってコードを修正してください：
+
+1. ユーザーの要求: {user_request}
+2. 既存の機能を維持すること
+3. エラーハンドリングを追加すること
+4. コードスタイルを統一すること
+
+## 出力形式
+修正後のコードのみを出力してください。説明は不要です。
+"""
+            
+            return prompt
+            
+        except Exception as e:
+            print(f"プロンプト生成エラー: {e}")
+            return f"コード修正: {user_request}"
+
+# グローバルインスタンス
+partial_mutation_manager = PartialMutationManager()
 
 class MultiLanguageCodeGenerator:
     def __init__(self):

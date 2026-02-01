@@ -83,44 +83,103 @@ class SelfEvolvingAgent:
                     "suggestion": "より具体的な指示（例：「デザインを変えて」「AIの性格を変えて」）を試してください"
                 }
             
-            # 改造コードを生成
-            mutation_code = self._generate_mutation_code(user_request, target_module)
-            
-            if not mutation_code:
-                return {
-                    "success": False,
-                    "error": "改造コードの生成に失敗しました"
-                }
-            
-            # 必要なimportを自動追加
-            updated_code, new_imports = self.mutation_manager.auto_add_imports(target_module, mutation_code)
-            
-            # ファイルを書き換え
-            success = self._apply_mutation(target_module, updated_code)
-            
-            if success:
-                # requirements.txtを更新
-                if new_imports:
-                    self.mutation_manager.update_requirements_txt(new_imports)
-                
-                return {
-                    "success": True,
-                    "target_module": target_module,
-                    "mutation_applied": True,
-                    "new_imports": new_imports,
-                    "message": f"{target_module} を正常に改造しました"
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": "ファイル書き換えに失敗しました"
-                }
+            # 局所的な自己書き換えを実行
+            return self._execute_partial_mutation(target_module, user_request)
                 
         except Exception as e:
             return {
                 "success": False,
                 "error": f"自己改造エラー: {str(e)}"
             }
+    
+    def _execute_partial_mutation(self, file_path: str, user_request: str) -> Dict:
+        """局所的な自己書き換えを実行"""
+        try:
+            from services.app_generator import partial_mutation_manager
+            
+            # ターゲット関数を推定
+            target_function = self._estimate_target_function(user_request, file_path)
+            
+            # 最適化されたプロンプトを生成
+            focused_prompt = partial_mutation_manager.generate_focused_prompt(
+                file_path, user_request, target_function
+            )
+            
+            # LLMで修正コードを生成
+            if not st.session_state.get(SESSION_KEYS['ollama']):
+                st.session_state[SESSION_KEYS['ollama']] = OllamaClient()
+            
+            ollama_client = st.session_state[SESSION_KEYS['ollama']]
+            modified_code = ollama_client.generate_response(focused_prompt)
+            
+            # 局所的な書き換えを適用
+            mutation_result = partial_mutation_manager.apply_partial_mutation(
+                file_path, modified_code, target_function
+            )
+            
+            if mutation_result["success"]:
+                return {
+                    "success": True,
+                    "target_module": file_path,
+                    "mutation_type": "partial",
+                    "target_function": target_function,
+                    "backup_path": mutation_result["backup_path"],
+                    "message": f"{file_path} の一部を正常に改造しました"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": mutation_result["error"],
+                    "backup_path": mutation_result.get("backup_path")
+                }
+                
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"局所的書き換えエラー: {str(e)}"
+            }
+    
+    def _estimate_target_function(self, user_request: str, file_path: str) -> Optional[str]:
+        """ユーザー要求からターゲット関数を推定"""
+        try:
+            from services.app_generator import CodeExtractor
+            
+            # ファイル内の関数を取得
+            extractor = CodeExtractor()
+            functions = extractor.extract_functions(file_path)
+            
+            if not functions:
+                return None
+            
+            # キーワードマッチングで関数を推定
+            request_lower = user_request.lower()
+            
+            # 一般的な関数名とのマッチング
+            function_keywords = {
+                "デザイン": ["get_", "render_", "apply_", "set_"],
+                "UI": ["render_", "display_", "show_", "update_"],
+                "スタイル": ["get_", "set_", "apply_", "update_"],
+                "AI": ["generate_", "process_", "handle_", "respond_"],
+                "会話": ["chat_", "conversation_", "message_", "respond_"],
+                "VRM": ["vrm_", "avatar_", "render_", "update_"],
+                "TODO": ["todo_", "task_", "add_", "complete_"],
+                "保存": ["save_", "store_", "write_", "persist_"],
+                "読み込み": ["load_", "read_", "get_", "fetch_"]
+            }
+            
+            for keyword, prefixes in function_keywords.items():
+                if keyword in request_lower:
+                    for func_name in functions.keys():
+                        for prefix in prefixes:
+                            if func_name.startswith(prefix):
+                                return func_name
+            
+            # 最初の関数をデフォルトとして返す
+            return list(functions.keys())[0] if functions else None
+            
+        except Exception as e:
+            print(f"関数推定エラー: {e}")
+            return None
     
     def _generate_mutation_code(self, user_request: str, target_module: str) -> Optional[str]:
         """改造コードを生成"""
