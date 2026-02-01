@@ -2660,7 +2660,179 @@ st.markdown('''
             
             success_message = "ダークモードを適用しました"
         
-        elif "エゾモモンガ" in patch_description or "ベージュ" in patch_description:
+        elif "LINE" in patch_description or "ライン" in patch_description:
+            # LINE風チャットUI用のCSS
+            line_chat_css = """
+st.markdown('''
+<style>
+    .line-chat-container {
+        background-color: #7494C0;
+        min-height: 100vh;
+        padding: 20px;
+        font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+    }
+    
+    .chat-message {
+        display: flex;
+        margin-bottom: 15px;
+        max-width: 70%;
+    }
+    
+    .user-message {
+        margin-left: auto;
+        justify-content: flex-end;
+    }
+    
+    .ai-message {
+        margin-right: auto;
+        justify-content: flex-start;
+    }
+    
+    .message-bubble {
+        padding: 12px 16px;
+        border-radius: 18px;
+        position: relative;
+        word-wrap: break-word;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .user-bubble {
+        background-color: #85E249;
+        border-bottom-right-radius: 4px;
+    }
+    
+    .ai-bubble {
+        background-color: #FFFFFF;
+        border-bottom-left-radius: 4px;
+    }
+    
+    .user-bubble::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        right: -8px;
+        width: 0;
+        height: 0;
+        border-left: 8px solid #85E249;
+        border-top: 8px solid transparent;
+    }
+    
+    .ai-bubble::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: -8px;
+        width: 0;
+        height: 0;
+        border-right: 8px solid #FFFFFF;
+        border-top: 8px solid transparent;
+    }
+    
+    .message-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        margin: 0 10px;
+        background-color: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+    }
+    
+    .user-avatar {
+        order: 2;
+    }
+    
+    .message-content {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .message-time {
+        font-size: 12px;
+        color: #999;
+        margin-top: 4px;
+    }
+    
+    .chat-input-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background-color: #f8f8f8;
+        padding: 15px;
+        border-top: 1px solid #e0e0e0;
+        z-index: 1000;
+    }
+    
+    .stApp > div {
+        padding-bottom: 80px;
+    }
+    
+    /* 既読演出 */
+    .read-indicator {
+        font-size: 11px;
+        color: #4CAF50;
+        margin-left: 5px;
+    }
+</style>
+''', unsafe_allow_html=True)
+"""
+            # 既存のCSSセクションを探して追加
+            if "st.markdown('<style>" in source_code:
+                modified_code = re.sub(
+                    r"(st\.markdown\('<style>.*?</style>', unsafe_allow_html=True\))",
+                    line_chat_css + r"\1",
+                    modified_code,
+                    flags=re.DOTALL
+                )
+            else:
+                # 新しくCSSセクションを追加
+                modified_code += f"\n\n{line_chat_css}"
+            
+            success_message = "LINE風チャットUIを適用しました"
+            
+            # チャット描画関数の書き換え
+            chat_function_replacement = '''
+def render_chat_history():
+    """LINE風チャット履歴を表示"""
+    conversation_history = st.session_state.conversation_history
+    if conversation_history:
+        render_line_chat(conversation_history)
+'''
+            
+            # 既存のチャット表示部分を置換
+            modified_code = re.sub(
+                r'# 会話履歴の表示.*?for i, conv in enumerate\(conversation_history\[-5:\], 1\):.*?st\.write\(conv\["assistant"\]\)',
+                chat_function_replacement.strip(),
+                modified_code,
+                flags=re.DOTALL
+            )
+            
+            # 入力フィールドの書き換え
+            input_replacement = '''
+# LINE風チャット入力
+user_input, send_button = render_line_chat_input()
+'''
+            
+            modified_code = re.sub(
+                r'# ユーザー入力エリア.*?st\.text_input\([^)]+\)',
+                input_replacement.strip(),
+                modified_code,
+                flags=re.DOTALL
+            )
+            
+            # 送信ボタンの処理も更新
+            send_replacement = '''
+if send_button and user_input.strip():
+'''
+            
+            modified_code = re.sub(
+                r'if st\.button\("📤 送信"[^)]+\) and user_input\.strip\(\):',
+                send_replacement.strip(),
+                modified_code
+            )
             # エゾモモンガ仕様の温かみのある配色
             ezomomonga_css = """
 st.markdown('''
@@ -2890,6 +3062,71 @@ def bootstrap_recovery():
     except Exception as e:
         print(f"❌ ブートストラップ・リカバリエラー: {e}")
         return False
+
+def render_line_chat(conversation_history):
+    """LINE風チャットUIを描画"""
+    import datetime
+    
+    if not conversation_history:
+        return
+    
+    # LINE風コンテナ
+    st.markdown('<div class="line-chat-container">', unsafe_allow_html=True)
+    
+    for i, conv in enumerate(conversation_history):
+        timestamp = datetime.datetime.now().strftime("%H:%M")
+        
+        # ユーザーメッセージ
+        st.markdown(f'''
+        <div class="chat-message user-message">
+            <div class="message-content">
+                <div class="message-bubble user-bubble">
+                    {conv["user"]}
+                </div>
+                <div class="message-time">
+                    {timestamp}
+                    <span class="read-indicator">既読</span>
+                </div>
+            </div>
+            <div class="message-avatar user-avatar">👤</div>
+        </div>
+        ''', unsafe_allow_html=True)
+        
+        # AIメッセージ（エゾモモンガ）
+        st.markdown(f'''
+        <div class="chat-message ai-message">
+            <div class="message-avatar">🐿️</div>
+            <div class="message-content">
+                <div class="message-bubble ai-bubble">
+                    {conv["assistant"]}
+                </div>
+                <div class="message-time">{timestamp}</div>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+def render_line_chat_input():
+    """LINE風チャット入力欄を描画"""
+    # 固定された入力コンテナ
+    st.markdown('<div class="chat-input-container">', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([4, 1])
+    
+    with col1:
+        user_input = st.text_input(
+            "メッセージを入力...",
+            key="line_chat_input",
+            label_visibility="collapsed"
+        )
+    
+    with col2:
+        send_button = st.button("送信", key="line_send_button")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    return user_input, send_button
 
 def self_reconstruction_ceremony():
     """進化の儀式 - UI演出"""
@@ -3191,11 +3428,13 @@ Assistant: VRMアバターの表情変更、面白いですね！表情制御は
 対応可能な変更例：
 - "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
 - "エゾモモンガ仕様にして" → [SELF_MODIFY: エゾモモンガ仕様の温かみのある配色に変更]
+- "LINEみたいにして" → [SELF_MODIFY: LINE風チャットUIを適用]
 - "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
 - "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
 
 特別なUIテーマ：
 - エゾモモンガ仕様：背景色#F5F5DC（ベージュ）、アクセント#8B4513（茶色）
+- LINE風チャットUI：背景#7494C0、ユーザー吹き出し#85E249、AI吹き出し#FFFFFF
 
 """
                         
@@ -4213,11 +4452,13 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 対応可能な変更例：
 - "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
 - "エゾモモンガ仕様にして" → [SELF_MODIFY: エゾモモンガ仕様の温かみのある配色に変更]
+- "LINEみたいにして" → [SELF_MODIFY: LINE風チャットUIを適用]
 - "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
 - "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
 
 特別なUIテーマ：
 - エゾモモンガ仕様：背景色#F5F5DC（ベージュ）、アクセント#8B4513（茶色）
+- LINE風チャットUI：背景#7494C0、ユーザー吹き出し#85E249、AI吹き出し#FFFFFF
 
 """
                         
@@ -4449,11 +4690,13 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 対応可能な変更例：
 - "ダークモードにして" → [SELF_MODIFY: ダークモードを適用]
 - "エゾモモンガ仕様にして" → [SELF_MODIFY: エゾモモンガ仕様の温かみのある配色に変更]
+- "LINEみたいにして" → [SELF_MODIFY: LINE風チャットUIを適用]
 - "サイドバーを右側に移して" → [SELF_MODIFY: サイドバーを右側に移動]
 - "エラーを修正して" → [SELF_MODIFY: エラー修正を適用]
 
 特別なUIテーマ：
 - エゾモモンガ仕様：背景色#F5F5DC（ベージュ）、アクセント#8B4513（茶色）
+- LINE風チャットUI：背景#7494C0、ユーザー吹き出し#85E249、AI吹き出し#FFFFFF
 
 """
                         
