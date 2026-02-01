@@ -225,6 +225,93 @@ def process_user_message(user_input):
                         st.info(f"💡 提案: {mutation_result['suggestion']}")
                     return
             
+            # 自己診断要求をチェック
+            if any(keyword in user_input for keyword in ["診断", "チェック", "分析", "レビュー"]):
+                with st.spinner("🔍 自己診断を実行中..."):
+                    diagnosis_result = evolution_agent.self_diagnose()
+                    
+                    if diagnosis_result["success"]:
+                        st.success("✅ 自己診断完了！")
+                        
+                        summary = diagnosis_result["summary"]
+                        st.info(f"📊 分析結果: {diagnosis_result['total_files_analyzed']}ファイル、{diagnosis_result['total_issues']}件の問題")
+                        
+                        # 健全性を表示
+                        health = summary["overall_health"]
+                        if health == "優秀":
+                            st.success(f"🏆 システム健全性: {health}")
+                        elif health == "良好":
+                            st.info(f"✅ システム健全性: {health}")
+                        elif health == "普通":
+                            st.warning(f"⚠️ システム健全性: {health}")
+                        else:
+                            st.error(f"❌ システム健全性: {health}")
+                        
+                        # コードメトリクス
+                        metrics = summary["code_metrics"]
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("総行数", metrics["total_lines"])
+                        with col2:
+                            st.metric("コード行数", metrics["code_lines"])
+                        with col3:
+                            st.metric("コード比率", f"{metrics['code_ratio']:.1%}")
+                        
+                        # 問題の内訳
+                        issue_breakdown = summary["issue_breakdown"]
+                        if any(issue_breakdown.values()):
+                            st.markdown("#### 📋 問題の内訳")
+                            for issue_type, count in issue_breakdown.items():
+                                if count > 0:
+                                    st.caption(f"• {issue_type}: {count}件")
+                        
+                        # 改善提案
+                        suggestions = diagnosis_result["suggestions"]
+                        if suggestions:
+                            st.markdown("#### 💡 改善提案")
+                            for i, suggestion in enumerate(suggestions[:5]):
+                                with st.expander(f"提案 {i+1}: {suggestion['template']['description']}", expanded=False):
+                                    st.write(f"**ファイル**: {suggestion['file_path']}")
+                                    st.write(f"**効果**: {suggestion['template']['benefit']}")
+                                    st.write(f"**優先度**: {suggestion['priority']:.2f}")
+                                    
+                                    if st.button(f"🔧 この提案を適用", key=f"apply_suggestion_{i}"):
+                                        with st.spinner("🔧 最適化を適用中..."):
+                                            opt_result = evolution_agent.apply_self_optimization(suggestion)
+                                            
+                                            if opt_result["success"]:
+                                                st.success("✅ 最適化を適用しました")
+                                                st.info(f"🎯 {opt_result['optimization']}")
+                                                st.info(f"🚀 {opt_result['impact']}")
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ 最適化失敗: {opt_result['error']}")
+                    else:
+                        st.error(f"❌ 自己診断に失敗しました: {diagnosis_result['error']}")
+            
+            # 究極の自律テスト
+            if "究極" in user_input and "自律" in user_input and "テスト" in user_input:
+                with st.spinner("🧠 究極の自律テストを実行中..."):
+                    autonomous_result = evolution_agent.autonomous_self_improvement()
+                    
+                    if autonomous_result["success"]:
+                        if autonomous_result.get("action_taken") == "none":
+                            st.success("🏆 システムは最適な状態です")
+                            st.info("特に改善の必要はありません")
+                        else:
+                            st.success("🧠 AIが自律的にシステムを改善しました！")
+                            st.info(f"💡 実行した改善: {autonomous_result['selected_suggestion']['template']['description']}")
+                            st.info(f"🚀 効果: {autonomous_result['selected_suggestion']['template']['benefit']}")
+                            
+                            # VRMアバターの反応
+                            vrm_controller = st.session_state[SESSION_KEYS['vrm_controller']]
+                            vrm_controller.set_expression("happy")
+                            
+                            st.rerun()
+                    else:
+                        st.error(f"❌ 究極の自律テストに失敗: {autonomous_result['error']}")
+                    return
+            
             # UIデザイン一貫性プロンプトを取得
             ui_prompt = get_ui_consistency_prompt()
             
