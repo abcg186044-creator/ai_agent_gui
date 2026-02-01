@@ -2738,6 +2738,31 @@ st.markdown('''
         align-items: center;
         justify-content: center;
         font-size: 20px;
+        object-fit: cover;
+        flex-shrink: 0;
+    }
+    
+    .ai-avatar {
+        background: linear-gradient(135deg, #8B4513, #A0522D);
+        color: white;
+        font-weight: bold;
+    }
+    
+    .user-avatar {
+        background: linear-gradient(135deg, #85E249, #7DD13C);
+        color: white;
+        font-weight: bold;
+    }
+    
+    .message-bubble {
+        padding: 12px 16px;
+        border-radius: 18px;
+        position: relative;
+        word-wrap: break-word;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        font-size: 15px;
+        line-height: 1.5;
+        max-width: 100%;
     }
     
     .user-avatar {
@@ -2761,13 +2786,50 @@ st.markdown('''
         left: 0;
         right: 0;
         background-color: #f8f8f8;
-        padding: 15px;
+        padding: 15px 20px;
         border-top: 1px solid #e0e0e0;
         z-index: 1000;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        backdrop-filter: blur(10px);
+        background-color: rgba(248, 248, 248, 0.95);
     }
     
     .stApp > div {
-        padding-bottom: 80px;
+        padding-bottom: 100px;
+    }
+    
+    /* 入力欄のスタイル調整 */
+    .stTextInput > div > div > input {
+        background-color: #ffffff;
+        border: 2px solid #e0e0e0;
+        border-radius: 25px;
+        padding: 12px 20px;
+        font-size: 15px;
+        transition: all 0.3s ease;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #7494C0;
+        box-shadow: 0 0 0 3px rgba(116, 148, 192, 0.2);
+        outline: none;
+    }
+    
+    /* 送信ボタンのスタイル調整 */
+    .stButton > button {
+        background-color: #7494C0;
+        color: white;
+        border: none;
+        border-radius: 25px;
+        padding: 12px 24px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        height: auto;
+    }
+    
+    .stButton > button:hover {
+        background-color: #5a7aa8;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
     
     /* 既読演出 */
@@ -3095,7 +3157,7 @@ def render_line_chat(conversation_history):
         # AIメッセージ（エゾモモンガ）
         st.markdown(f'''
         <div class="chat-message ai-message">
-            <div class="message-avatar">🐿️</div>
+            <div class="message-avatar ai-avatar">🐿️</div>
             <div class="message-content">
                 <div class="message-bubble ai-bubble">
                     {conv["assistant"]}
@@ -3106,6 +3168,28 @@ def render_line_chat(conversation_history):
         ''', unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 自動スクロール用JavaScript
+    st.markdown("""
+    <script>
+    // メッセージが更新されるたびに最下部へスクロール
+    setTimeout(function() {
+        window.scrollTo(0, document.body.scrollHeight);
+    }, 100);
+    
+    // 追加：DOM変更を監視して自動スクロール
+    const observer = new MutationObserver(function(mutations) {
+        setTimeout(function() {
+            window.scrollTo(0, document.body.scrollHeight);
+        }, 50);
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    </script>
+    """, unsafe_allow_html=True)
 
 def render_line_chat_input():
     """LINE風チャット入力欄を描画"""
@@ -3115,14 +3199,17 @@ def render_line_chat_input():
     col1, col2 = st.columns([4, 1])
     
     with col1:
-        user_input = st.text_input(
+        user_input = st.chat_input(
             "メッセージを入力...",
-            key="line_chat_input",
-            label_visibility="collapsed"
+            key="line_chat_input"
         )
     
     with col2:
-        send_button = st.button("送信", key="line_send_button")
+        # チャット入力がある場合の送信ボタン
+        if user_input:
+            send_button = st.button("送信", key="line_send_button", type="primary")
+        else:
+            send_button = False
     
     st.markdown('</div>', unsafe_allow_html=True)
     
