@@ -312,6 +312,29 @@ def process_user_message(user_input):
                         st.error(f"❌ 究極の自律テストに失敗: {autonomous_result['error']}")
                     return
             
+            # 秘密の機能実装命令（エゾモモンガとしての個性）
+            if "エゾモモンガ" in user_input and "秘密" in user_input and "隠し機能" in user_input:
+                with st.spinner("🐿️ エゾモモンガの秘密の機能を実装中..."):
+                    secret_feature_result = evolution_agent.implement_secret_feature()
+                    
+                    if secret_feature_result["success"]:
+                        st.success("🐿️ エゾモモンガの秘密の機能を実装しました！")
+                        st.info(f"✨ 実装した機能: {secret_feature_result['feature_name']}")
+                        st.info(f"📝 詳細: {secret_feature_result['description']}")
+                        
+                        # 進化履歴に記録
+                        st.info(f"📜 進化履歴: {secret_feature_result['evolution_log']}")
+                        
+                        # VRMアバターの特別反応
+                        vrm_controller = st.session_state[SESSION_KEYS['vrm_controller']]
+                        vrm_controller.set_expression("happy")
+                        
+                        # 画面をリロード
+                        st.rerun()
+                    else:
+                        st.error(f"❌ 秘密の機能実装に失敗: {secret_feature_result['error']}")
+                    return
+            
             # UIデザイン一貫性プロンプトを取得
             ui_prompt = get_ui_consistency_prompt()
             

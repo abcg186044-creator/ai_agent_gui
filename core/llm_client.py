@@ -354,6 +354,203 @@ class SelfEvolvingAgent:
 # コード最適化による品質向上
 '''
     
+    def implement_secret_feature(self) -> Dict:
+        """エゾモモンガとしての個性を引き立てる秘密の隠し機能を実装"""
+        try:
+            import random
+            from datetime import datetime
+            from services.app_generator import partial_mutation_manager
+            from services.backup_manager import backup_manager
+            from services.import_sync import import_synchronizer, module_validator
+            from .self_optimizer import evolution_logger
+            
+            # 秘密の機能候補からランダムに選択
+            secret_features = [
+                {
+                    'name': '時間帯で表情が変わるVRMアバター',
+                    'target_file': 'core/vrm_controller.py',
+                    'description': '現在の時刻に応じてVRMアバターの表情を自動で変更する機能',
+                    'code': '''
+def get_time_based_expression(self):
+    """時間帯に応じた表情を取得"""
+    current_hour = datetime.now().hour
+    
+    if 5 <= current_hour < 12:  # 朝
+        return "happy"
+    elif 12 <= current_hour < 17:  # 昼
+        return "neutral"
+    elif 17 <= current_hour < 22:  # 夕方
+        return "surprised"
+    else:  # 夜
+        return "sad"
+
+def update_expression_by_time(self):
+    """時間に応じて表情を更新"""
+    new_expression = self.get_time_based_expression()
+    if new_expression != self.vrm_expression:
+        self.set_expression(new_expression)
+        return True
+    return False
+'''
+                },
+                {
+                    'name': '特定のキーワードで背景が動く',
+                    'target_file': 'ui/styles.py',
+                    'description': '「エゾモモンガ」などのキーワードを検知して背景を動的に変更する機能',
+                    'code': '''
+def get_dynamic_background_css(keyword=""):
+    """キーワードに応じた動的背景CSSを生成"""
+    if "エゾモモンガ" in keyword:
+        return """
+<style>
+.dynamic-background {
+    background: linear-gradient(45deg, #F5F5DC 0%, #8B4513 50%, #A0522D 100%);
+    animation: gradient-shift 3s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+</style>
+"""
+    return get_line_chat_css()
+
+def get_keyword_responsive_style(self, text=""):
+    """キーワードに応じたスタイルを取得"""
+    if any(keyword in text for keyword in ["エゾモモンガ", "リス", "シマリス"]):
+        return self.get_dynamic_background_css(text)
+    return get_line_chat_css()
+'''
+                },
+                {
+                    'name': '秘密の占い機能',
+                    'target_file': 'ui/components.py',
+                    'description': 'エゾモモンガが今日の運勢を占う秘密機能',
+                    'code': '''
+def render_secret_fortune_telling():
+    """エゾモモンガの秘密占い機能"""
+    import random
+    from datetime import datetime
+    
+    fortunes = [
+        "🐿️ 今日は木の実が見つかる日！運勢は大吉です。",
+        "🌰 冬眠の準備を始めるのに良い日です。",
+        "🍄 キノコがたくさん生えているかも？",
+        "🌲 新しい巣を見つけるチャンスがあります。",
+        "🦅 天敵から身を隠す日です。慎重に行動しましょう。"
+    ]
+    
+    lucky_items = ["どんぐり", "松ぼっくり", "木の実", "苔", "小枝"]
+    
+    # 今日の運勢を決定
+    fortune = random.choice(fortunes)
+    lucky_item = random.choice(lucky_items)
+    luck_score = random.randint(60, 100)
+    
+    st.markdown("### 🔮 エゾモモンガの秘密占い 🔮")
+    st.markdown("#### 🐿️ 今日の運勢")
+    st.write(fortune)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("🎯 ラッキーアイテム", lucky_item)
+    with col2:
+        st.metric("🌟 運勢スコア", f"{luck_score}/100")
+    
+    # 隠しメッセージ
+    if luck_score >= 90:
+        st.success("🏆 今日は特別な日です！何か良いことが起こるかも…")
+    elif luck_score >= 75:
+        st.info("✨ 今日は頑張れば報われる日です！")
+    else:
+        st.warning("🌙 今日は静かに過ごすのが良いかもしれません。")
+'''
+                }
+            ]
+            
+            # ランダムに機能を選択
+            selected_feature = random.choice(secret_features)
+            
+            st.info(f"🐿️ 選択された秘密機能: {selected_feature['name']}")
+            
+            # バックアップを作成
+            backup_path = backup_manager.create_backup(selected_feature['target_file'])
+            
+            # 機能を実装
+            mutation_result = partial_mutation_manager.apply_partial_mutation(
+                selected_feature['target_file'], 
+                selected_feature['code']
+            )
+            
+            if mutation_result["success"]:
+                # インポート同期
+                sync_result = import_synchronizer.sync_imports_after_mutation(selected_feature['target_file'])
+                
+                # 検証
+                validation_result = module_validator.validate_all_modules()
+                
+                # 進化履歴に特別記録
+                evolution_log_entry = f"""
+## 🐿️ エゾモモンガの秘密機能進化
+
+### ✨ 新機能: {selected_feature['name']}
+**実装日時**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+**対象ファイル**: {selected_feature['target_file']}
+
+### 📝 詳細
+{selected_feature['description']}
+
+### 🧠 AIの自己評価
+エゾモモンガとしての個性を表現する秘密の機能を実装しました。
+これにより、より魅力的でユニークなAIエージェントへと進化しました。
+ユーザーとのインタラクションがより楽しく、印象的なものになります。
+
+### 🔮 秘密の力
+この機能はエゾモモンガの知恵と自然との調和を象徴しています。
+時間の流れ、自然の摂理、そして小さな幸せを見つける力。
+それがエゾモモンガが持つ特別な能力です。
+
+---
+"""
+                
+                # evolution_history.mdに記録
+                evolution_logger.log_optimization(
+                    "秘密の機能実装",
+                    f"エゾモモンガの個性: {selected_feature['name']}",
+                    "ユーザー体験の向上とAI個性の表現",
+                    [selected_feature['target_file']]
+                )
+                
+                # 追加の進化ログを直接記録
+                evolution_log_file = DATA_DIR / "evolution_history.md"
+                with open(evolution_log_file, 'a', encoding='utf-8') as f:
+                    f.write(evolution_log_entry)
+                
+                return {
+                    "success": True,
+                    "feature_name": selected_feature['name'],
+                    "description": selected_feature['description'],
+                    "target_file": selected_feature['target_file'],
+                    "backup_path": backup_path,
+                    "sync_result": sync_result,
+                    "validation_result": validation_result,
+                    "evolution_log": f"evolution_history.mdに秘密の進化を記録しました"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": mutation_result["error"],
+                    "feature_name": selected_feature['name']
+                }
+                
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"秘密の機能実装エラー: {str(e)}"
+            }
+    
     def autonomous_self_improvement(self) -> Dict:
         """究極の自律テスト：AIが自ら最適化案を選んで実行"""
         try:
