@@ -3,7 +3,7 @@ UIスタイルモジュール
 LINE風CSSやテーマ設定（ベージュ・茶色）を管理
 """
 
-from .constants import UI_COLORS, UI_STYLES
+from .constants import UI_COLORS, UI_STYLES, COMPONENT_STYLES, THEMES
 
 def get_line_chat_css():
     """LINE風チャットのCSSを取得"""

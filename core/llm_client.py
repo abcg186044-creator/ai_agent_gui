@@ -155,6 +155,12 @@ class SelfEvolvingAgent:
     def _auto_complete_imports(self, file_path: str, code: str) -> str:
         """インポート自動チェックと補完"""
         try:
+            # ファイルが存在しない場合は作成
+            if not Path(file_path).exists():
+                print(f"📁 ファイルが存在しないため作成: {file_path}")
+                self._create_missing_file(file_path, code)
+                return code
+            
             # 現在のインポートを抽出
             existing_imports = self._extract_imports_from_file(file_path)
             
@@ -179,6 +185,109 @@ class SelfEvolvingAgent:
         except Exception as e:
             print(f"⚠️ インポート自動補完エラー: {e}")
             return code
+    
+    def _create_missing_file(self, file_path: str, code: str):
+        """存在しないファイルを作成"""
+        try:
+            # ディレクトリを作成
+            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+            
+            # 基本構造のファイルを作成
+            file_extension = Path(file_path).suffix
+            
+            if file_extension == '.py':
+                # Pythonファイルの場合
+                basic_structure = f"""
+\"\"\"
+{Path(file_path).stem} モジュール
+自動生成されたファイル
+\"\"\"
+
+# 必要なインポート
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+import os
+import json
+
+# 基本クラス
+class {Path(file_path).stem.replace('.py', '').capitalize()}:
+    def __init__(self):
+        self.name = "{Path(file_path).stem}"
+        self.created_at = datetime.now()
+    
+    def get_info(self) -> Dict[str, Any]:
+        return {{
+            "name": self.name,
+            "created_at": self.created_at.isoformat()
+        }}
+
+# 生成されたコード
+{code}
+"""
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(basic_structure)
+                
+            else:
+                # その他のファイルの場合
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(code)
+            
+            print(f"✅ ファイルを作成しました: {file_path}")
+            
+        except Exception as e:
+            print(f"❌ ファイル作成エラー: {e}")
+    
+    def _validate_import_path(self, import_statement: str) -> bool:
+        """インポートパスの妥当性を検証"""
+        try:
+            # インポート文を解析
+            if import_statement.startswith('from '):
+                parts = import_statement.split()
+                if len(parts) >= 4 and parts[1] == 'import':
+                    module_path = parts[1]
+                    # 相対インポートかチェック
+                    if module_path.startswith('.'):
+                        return True
+                    # 絶対インポートかチェック
+                    if '.' in module_path:
+                        return True
+            
+            elif import_statement.startswith('import '):
+                module_name = import_statement.replace('import ', '').strip()
+                # 標準ライブラリかチェック
+                standard_libs = ['os', 'sys', 'json', 're', 'datetime', 'pathlib', 'typing']
+                if module_name in standard_libs:
+                    return True
+                # モジュール名にドットが含まれるかチェック
+                if '.' in module_name:
+                    return True
+            
+            return False
+            
+        except Exception:
+            return False
+    
+    def _suggest_alternative_import(self, import_statement: str, file_path: str) -> str:
+        """代替インポートを提案"""
+        try:
+            # ファイルパスからモジュール名を推定
+            file_parts = Path(file_path).parts
+            
+            if 'ui' in file_parts:
+                if 'constants' in import_statement:
+                    return "from ui.constants import UI_COLORS, UI_STYLES"
+                elif 'styles' in import_statement:
+                    return "from ui.styles import get_line_chat_css"
+                    
+            elif 'core' in file_parts:
+                if 'constants' in import_statement:
+                    return "from core.constants import UI_COLORS, UI_STYLES"
+                    
+            # デフォルトの提案
+            return f"# TODO: {import_statement} のインポートを確認してください"
+            
+        except Exception:
+            return f"# TODO: {import_statement} のインポートを確認してください"
     
     def _extract_imports_from_file(self, file_path: str) -> set:
         """ファイルから既存のインポートを抽出"""
