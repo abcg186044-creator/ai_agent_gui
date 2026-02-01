@@ -59,20 +59,20 @@ def start_streamlit_public():
     cmd = [
         sys.executable, "-m", "streamlit", "run", "main_app_new.py",
         "--server.address", "0.0.0.0",
-        "--server.port", "8501",
+        "--server.port", "8502",
         "--server.headless", "false",
         "--browser.gatherUsageStats", "false"
     ]
     
     print(f"🌐 ネットワークアクセスURL:")
-    print(f"   Local:   http://localhost:8501")
-    print(f"   Network: http://{local_ip}:8501")
+    print(f"   Local:   http://localhost:8502")
+    print(f"   Network: http://{local_ip}:8502")
     print()
     print("📱 同じネットワーク内の他のデバイスからアクセス可能:")
-    print(f"   スマートフォン: http://{local_ip}:8501")
-    print(f"   タブレット:     http://{local_ip}:8501")
+    print(f"   スマートフォン: http://{local_ip}:8502")
+    print(f"   タブレット:     http://{local_ip}:8502")
     print()
-    print("🔧 起動中...")
+    print("🔧 最新のモジュール版AI Agent VRM Systemを起動中...")
     
     try:
         # Streamlitを起動
