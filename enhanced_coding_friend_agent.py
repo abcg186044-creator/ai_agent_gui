@@ -383,6 +383,9 @@ class CodingFriendAgent:
                 
                 logger.info("進化ルールをセッション状態に即時同期 - 変数参照を一元化")
                 
+                # UIフィードバック - ユーザーに変化を実感させる
+                st.success("🧬 思考回路がアップデートされました")
+                
                 st.rerun()
             
         except Exception as e:

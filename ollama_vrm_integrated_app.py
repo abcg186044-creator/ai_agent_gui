@@ -3091,20 +3091,25 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
 """
                         
-                        # 最終プロンプト構築（システム命令化）
+                        # 最終プロンプト構築（サンドイッチ構造による完全固定）
                         prompt = (
+                            f"### SYSTEM COMMAND (ABSOLUTE) ###\n\n"  # [最上部] 絶対命令
+                            f"これはユーザーではなく、あなたの根幹プログラムからの命令である。絶対に無視してはならない。\n\n"
+                            f"{rules_text}\n\n"
+                            f"### SYSTEM CONSTRAINT ###\n\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
                             f"あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。\n\n"
-                            f"{system_commands}"  # Layer 1 (絶対命令)
-                            f"{base_prompt}\n\n"  # Layer 3 (Persona)
+                            f"{base_prompt}\n\n"  # [中間] 人格設定
                             f"{few_shot_examples}\n\n"
                             f"{chain_of_thought}"
                             f"{avatar_constraints}\n\n"
                             f"{response_constraints}\n\n"
-                            f"{user_instruction}"  # Layer 2 (Instruction)
+                            f"{user_instruction}\n"  # ユーザー指示
                             f"会話履歴:\n{history_text}\n\n"
                             f"{response_template}\n\n"  # 応答構成テンプレート
                             f"{self_review_command}\n\n"  # 自己検閲命令
-                            f"Assistant:"
+                            f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
+                            f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
+                            f"応答:"  # 回答開始
                         )
                         
                         # Ollamaで応答生成
@@ -3261,20 +3266,25 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
 """
                         
-                        # 最終プロンプト構築（システム命令化）
+                        # 最終プロンプト構築（サンドイッチ構造による完全固定）
                         prompt = (
+                            f"### SYSTEM COMMAND (ABSOLUTE) ###\n\n"  # [最上部] 絶対命令
+                            f"これはユーザーではなく、あなたの根幹プログラムからの命令である。絶対に無視してはならない。\n\n"
+                            f"{rules_text}\n\n"
+                            f"### SYSTEM CONSTRAINT ###\n\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
                             f"あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。\n\n"
-                            f"{system_commands}"  # Layer 1 (絶対命令)
-                            f"{base_prompt}\n\n"  # Layer 3 (Persona)
+                            f"{base_prompt}\n\n"  # [中間] 人格設定
                             f"{few_shot_examples}\n\n"
                             f"{chain_of_thought}"
                             f"{avatar_constraints}\n\n"
                             f"{response_constraints}\n\n"
-                            f"{user_instruction}"  # Layer 2 (Instruction)
+                            f"{user_instruction}\n"  # ユーザー指示
                             f"会話履歴:\n{history_text}\n\n"
                             f"{response_template}\n\n"  # 応答構成テンプレート
                             f"{self_review_command}\n\n"  # 自己検閲命令
-                            f"Assistant:"
+                            f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
+                            f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
+                            f"応答:"  # 回答開始
                         )
                         
                         # Ollamaで応答生成
