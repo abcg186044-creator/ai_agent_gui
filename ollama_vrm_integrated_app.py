@@ -2214,9 +2214,9 @@ class OllamaClient:
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": 0.7,
+                        "temperature": 0.8,
                         "top_p": 0.9,
-                        "repeat_penalty": 1.1,
+                        "repeat_penalty": 1.2,
                         "num_ctx": 8192
                     }
                 },
@@ -3017,9 +3017,29 @@ if __name__ == "__main__":
                         for conv in conversation_history:
                             history_text += f"User: {conv['user']}\nAssistant: {conv['assistant']}\n"
                         
-                        # プロンプト構築（アバター状態に応じて調整）
-                        # システムプロンプトの冒頭に出力の最低条件をハードコード
-                        system_prompt = "あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。"
+                        # プロンプト階層構造の再構築（絶対優先順位）
+                        
+                        # Layer 1 (System - 最優先): 進化ルールを読み込み
+                        evolution_rules = []
+                        try:
+                            import json
+                            if os.path.exists("personalities_custom.json"):
+                                with open("personalities_custom.json", "r", encoding="utf-8") as f:
+                                    custom_data = json.load(f)
+                                    evolution_rules = custom_data.get("evolution_rules", [])
+                        except Exception as e:
+                            print(f"進化ルール読み込みエラー: {e}")
+                        
+                        system_rules = ""
+                        if evolution_rules:
+                            system_rules = "\n".join([f"[MUST_OBEY_RULE]{rule}[/MUST_OBEY_RULE]" for rule in evolution_rules])
+                            system_rules = f"[SYSTEM_RULES]\n{system_rules}\n[/SYSTEM_RULES]\n\n"
+                        
+                        # Layer 2 (Instruction): ユーザーの直近の具体的な指示
+                        user_instruction = f"[CURRENT_INSTRUCTION]\nユーザー入力: {st.session_state.recognized_text}\n[/CURRENT_INSTRUCTION]\n\n"
+                        
+                        # Layer 3 (Persona): 人格設定と追加制約
+                        base_prompt = current_personality['prompt']
                         
                         # Few-Shotプロンプト（理想的な会話例）
                         few_shot_examples = """
@@ -3034,31 +3054,32 @@ AI: 「いいね！シンプルな四則演算かな、それとも科学計算�
 AI: 「大変だったね！どんなエラーメッセージが出たか教えてくれる？一緒にデバッグしていこう。エラーは成長のチャンスだからね！」
 """
                         
-                        # Chain of Thought（思考プロセスの誘導）
+                        # Chain of Thoughtと制約
                         chain_of_thought = """
 回答の前に、ユーザーが何を求めているか、現在の会話の雰囲気はどうかを内部的に分析し、その分析に基づいた最適なトーンで回答を生成してください。
 """
                         
-                        # 回答の肉付け命令
                         response_constraints = """
 短文（了解、なるほど等）での回答を厳禁します。必ずユーザーの発言に共感し、その後に自分の意見や提案を付け加え、150文字〜300文字程度の『人間らしい』段落構成で回答してください。
 """
                         
-                        base_prompt = current_personality['prompt']
+                        avatar_constraints = ""
                         if not st.session_state.vrm_visible:
-                            # アバター非表示時の対話肉付けプロンプト
-                            enhanced_prompt = system_prompt + "\n\n" + few_shot_examples + "\n\n" + chain_of_thought + "\n\n" + base_prompt + "\n\n" + \
-                                "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。" + \
-                                "簡潔すぎる応答を避け、ユーザーの意図を汲み取った親しみやすい文章を生成してください。" + \
-                                "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。" + \
-                                response_constraints
-                        else:
-                            enhanced_prompt = system_prompt + "\n\n" + few_shot_examples + "\n\n" + chain_of_thought + "\n\n" + base_prompt + "\n\n" + response_constraints
+                            avatar_constraints = "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。"
                         
-                        prompt = (enhanced_prompt + "\n\n" + 
-                                 "以下のユーザーの入力に対して、人格に応じて自然に応答してください。\n\n" +
-                                 "ユーザー入力: " + st.session_state.recognized_text + "\n\n" +
-                                 history_text + "\n\nAssistant:")
+                        # 最終プロンプト構築（絶対優先順位）
+                        prompt = (
+                            f"あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。\n\n"
+                            f"**重要**: Layer 1と2は人格設定よりも優先されます。[MUST_OBEY_RULE]で囲まれたルールは絶対優先で遵守してください。挨拶には挨拶を返し、短文回答（了解等）は禁止せよ。\n\n"
+                            f"{system_rules}"  # Layer 1 (最優先)
+                            f"{user_instruction}"  # Layer 2
+                            f"{few_shot_examples}\n\n"
+                            f"{chain_of_thought}"
+                            f"{base_prompt}\n\n"  # Layer 3
+                            f"{avatar_constraints}\n\n"
+                            f"{response_constraints}\n\n"
+                            f"会話履歴:\n{history_text}\n\nAssistant:"
+                        )
                         
                         # Ollamaで応答生成
                         if not st.session_state.ollama:
@@ -3153,9 +3174,29 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                         for conv in conversation_history:
                             history_text += f"User: {conv['user']}\nAssistant: {conv['assistant']}\n"
                         
-                        # プロンプト構築（アバター状態に応じて調整）
-                        # システムプロンプトの冒頭に出力の最低条件をハードコード
-                        system_prompt = "あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。"
+                        # プロンプト階層構造の再構築（絶対優先順位）
+                        
+                        # Layer 1 (System - 最優先): 進化ルールを読み込み
+                        evolution_rules = []
+                        try:
+                            import json
+                            if os.path.exists("personalities_custom.json"):
+                                with open("personalities_custom.json", "r", encoding="utf-8") as f:
+                                    custom_data = json.load(f)
+                                    evolution_rules = custom_data.get("evolution_rules", [])
+                        except Exception as e:
+                            print(f"進化ルール読み込みエラー: {e}")
+                        
+                        system_rules = ""
+                        if evolution_rules:
+                            system_rules = "\n".join([f"[MUST_OBEY_RULE]{rule}[/MUST_OBEY_RULE]" for rule in evolution_rules])
+                            system_rules = f"[SYSTEM_RULES]\n{system_rules}\n[/SYSTEM_RULES]\n\n"
+                        
+                        # Layer 2 (Instruction): ユーザーの直近の具体的な指示
+                        user_instruction = f"[CURRENT_INSTRUCTION]\nユーザー入力: {st.session_state.recognized_text}\n[/CURRENT_INSTRUCTION]\n\n"
+                        
+                        # Layer 3 (Persona): 人格設定と追加制約
+                        base_prompt = current_personality['prompt']
                         
                         # Few-Shotプロンプト（理想的な会話例）
                         few_shot_examples = """
@@ -3170,31 +3211,32 @@ AI: 「いいね！シンプルな四則演算かな、それとも科学計算�
 AI: 「大変だったね！どんなエラーメッセージが出たか教えてくれる？一緒にデバッグしていこう。エラーは成長のチャンスだからね！」
 """
                         
-                        # Chain of Thought（思考プロセスの誘導）
+                        # Chain of Thoughtと制約
                         chain_of_thought = """
 回答の前に、ユーザーが何を求めているか、現在の会話の雰囲気はどうかを内部的に分析し、その分析に基づいた最適なトーンで回答を生成してください。
 """
                         
-                        # 回答の肉付け命令
                         response_constraints = """
 短文（了解、なるほど等）での回答を厳禁します。必ずユーザーの発言に共感し、その後に自分の意見や提案を付け加え、150文字〜300文字程度の『人間らしい』段落構成で回答してください。
 """
                         
-                        base_prompt = current_personality['prompt']
+                        avatar_constraints = ""
                         if not st.session_state.vrm_visible:
-                            # アバター非表示時の対話肉付けプロンプト
-                            enhanced_prompt = system_prompt + "\n\n" + few_shot_examples + "\n\n" + chain_of_thought + "\n\n" + base_prompt + "\n\n" + \
-                                "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。" + \
-                                "簡潔すぎる応答を避け、ユーザーの意図を汲み取った親しみやすい文章を生成してください。" + \
-                                "「了解した」のような短い応答ではなく、具体的で丁寧な返答を心がけてください。" + \
-                                response_constraints
-                        else:
-                            enhanced_prompt = system_prompt + "\n\n" + few_shot_examples + "\n\n" + chain_of_thought + "\n\n" + base_prompt + "\n\n" + response_constraints
+                            avatar_constraints = "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。"
                         
-                        prompt = (enhanced_prompt + "\n\n" + 
-                                 "以下のユーザーの入力に対して、人格に応じて自然に応答してください。\n\n" +
-                                 "ユーザー入力: " + st.session_state.recognized_text + "\n\n" +
-                                 history_text + "\n\nAssistant:")
+                        # 最終プロンプト構築（絶対優先順位）
+                        prompt = (
+                            f"あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。\n\n"
+                            f"**重要**: Layer 1と2は人格設定よりも優先されます。[MUST_OBEY_RULE]で囲まれたルールは絶対優先で遵守してください。挨拶には挨拶を返し、短文回答（了解等）は禁止せよ。\n\n"
+                            f"{system_rules}"  # Layer 1 (最優先)
+                            f"{user_instruction}"  # Layer 2
+                            f"{few_shot_examples}\n\n"
+                            f"{chain_of_thought}"
+                            f"{base_prompt}\n\n"  # Layer 3
+                            f"{avatar_constraints}\n\n"
+                            f"{response_constraints}\n\n"
+                            f"会話履歴:\n{history_text}\n\nAssistant:"
+                        )
                         
                         # Ollamaで応答生成
                         if not st.session_state.ollama:
@@ -3259,12 +3301,40 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
         # VRMアバター表示（条件付き）
         vrm_controller = st.session_state.vrm_controller
         if st.session_state.vrm_visible and vrm_controller.vrm_path:
+            # 一意のキーを生成してメモリリークを防止
+            import time
+            import hashlib
+            unique_key = hashlib.md5(f"{st.session_state.vrm_scale}_{st.session_state.vrm_rotation}_{st.session_state.vrm_expression}_{time.time()}".encode()).hexdigest()[:16]
+            
             vrm_html = vrm_controller.get_vrm_html(
                 vrm_scale=st.session_state.vrm_scale,
                 vrm_rotation=st.session_state.vrm_rotation,
                 vrm_expression=st.session_state.vrm_expression
             )
-            st.components.v1.html(vrm_html, height=600)
+            
+            # JavaScriptのガード節を追加して二重定義を防止
+            enhanced_vrm_html = f"""
+            <script>
+            // グローバル変数のガード節
+            if (typeof window.vrmApp !== 'undefined') {{
+                console.log('VRM App already exists, cleaning up...');
+                if (window.vrmApp.cleanup) {{
+                    window.vrmApp.cleanup();
+                }}
+                window.vrmApp = undefined;
+            }}
+            
+            // 古いコンポーネントのクリーンアップ
+            const oldScripts = document.querySelectorAll('script[data-vrm-key]');
+            oldScripts.forEach(script => script.remove());
+            
+            // 現在のスクリプトにマークを付けて追跡
+            document.currentScript.setAttribute('data-vrm-key', '{unique_key}');
+            </script>
+            {vrm_html}
+            """
+            
+            st.components.v1.html(enhanced_vrm_html, height=600, key=f"vrm_component_{unique_key}")
         elif not st.session_state.vrm_visible:
             st.info("🎭 アバターは非表示になっています。対話に集中できます。")
         else:

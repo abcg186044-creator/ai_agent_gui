@@ -357,8 +357,8 @@ class CodingFriendAgent:
                     st.session_state.current_personality_prompt = ""
                 
                 # 進化ルールを人格プロンプトに反映
-                evolution_rules_text = "\n".join([f"- {r}" for r in custom_data["evolution_rules"]])
-                enhanced_prompt = f"あなたは自己進化するAIエージェントです。\n\n進化ルール:\n{evolution_rules_text}\n\nこれらのルールを常に守って応答してください。"
+                evolution_rules_text = "\n".join([f"[MUST_OBEY_RULE]{r}[/MUST_OBEY_RULE]" for r in custom_data["evolution_rules"]])
+                enhanced_prompt = f"あなたは自己進化するAIエージェントです。\n\n[SYSTEM_RULES]\n{evolution_rules_text}\n[/SYSTEM_RULES]\n\nこれらの[MUST_OBEY_RULE]で囲まれたルールは絶対優先で遵守してください。人格設定よりも上書きされます。"
                 
                 # 現在の人格設定に進化ルールを追加
                 current_personality = st.session_state.get("current_personality", "friendly_engineer")
