@@ -9,7 +9,7 @@ import ast
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Set, Optional, Tuple
+from typing import Dict, List, Set, Optional, Tuple, Any
 from core.constants import *
 
 class CodeAnalyzer:

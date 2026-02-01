@@ -116,9 +116,12 @@ class SelfEvolvingAgent:
             # インポート自動チェックと補完
             enhanced_code = self._auto_complete_imports(target_file, modified_code)
             
+            # 最優先システム命令：typingインポートのバリデーションと自動補完
+            validated_code = self._validate_and_complete_typing_imports(target_file, enhanced_code)
+            
             # 特定ファイルのみを上書き保存
             mutation_result = partial_mutation_manager.apply_partial_mutation(
-                target_file, enhanced_code, target_function
+                target_file, validated_code, target_function
             )
             
             if mutation_result["success"]:
@@ -232,6 +235,97 @@ class SelfEvolvingAgent:
         except Exception as e:
             print(f"名前抽出エラー: {e}")
             return None
+    
+    def _validate_and_complete_typing_imports(self, file_path: str, code: str) -> str:
+        """最優先システム命令：typingインポートのバリデーションと自動補完"""
+        try:
+            # 現在のインポートを抽出
+            existing_imports = self._extract_imports_from_file(file_path)
+            
+            # 必要なtypingインポートを検出
+            required_typing_imports = self._detect_required_typing_imports(code)
+            
+            # 不足しているtypingインポートを特定
+            missing_typing_imports = required_typing_imports - existing_imports
+            
+            if missing_typing_imports:
+                # typingインポート文を生成
+                typing_import_statement = self._generate_typing_import_statement(missing_typing_imports)
+                
+                # コードの先頭にtypingインポートを追加
+                lines = code.split('\n')
+                
+                # 最初の既存のimport文の前に追加
+                insert_index = 0
+                for i, line in enumerate(lines):
+                    if line.strip().startswith(('import ', 'from ')):
+                        insert_index = i + 1
+                    elif line.strip() and not line.startswith('#') and not line.startswith('"""') and not line.startswith("'''"):
+                        break
+                
+                lines.insert(insert_index, typing_import_statement)
+                lines.insert(insert_index + 1, '')
+                
+                validated_code = '\n'.join(lines)
+                
+                print(f"🔧 typingインポートを自動補完: {missing_typing_imports}")
+                return validated_code
+            
+            return code
+            
+        except Exception as e:
+            print(f"⚠️ typingインポート検証エラー: {e}")
+            return code
+    
+    def _detect_required_typing_imports(self, code: str) -> set:
+        """コードから必要なtypingインポートを検出"""
+        typing_imports = set()
+        
+        # 基本的な型ヒント
+        basic_types = ['Dict', 'List', 'Optional', 'Any', 'Tuple', 'Union']
+        for type_name in basic_types:
+            if type_name in code:
+                typing_imports.add(type_name)
+        
+        # 高度な型ヒント
+        advanced_types = ['Callable', 'Iterator', 'Generator', 'Type', 'NoReturn', 'Literal', 'Final', 'ClassVar', 'cast', 'overload', 'TypeVar', 'Generic']
+        for type_name in advanced_types:
+            if type_name in code:
+                typing_imports.add(type_name)
+        
+        return typing_imports
+    
+    def _generate_typing_import_statement(self, typing_imports: set) -> str:
+        """typingインポート文を生成"""
+        if not typing_imports:
+            return ""
+        
+        # アルファベット順にソート
+        sorted_imports = sorted(list(typing_imports))
+        
+        return f"from typing import {', '.join(sorted_imports)}"
+    
+    def _extract_imports_from_file(self, file_path: str) -> set:
+        """ファイルから既存のインポートを抽出"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            imports = set()
+            lines = content.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if line.startswith('from typing import'):
+                    # from typing import Dict, List, Optional
+                    imports.update(line.replace('from typing import ', '').split(', '))
+                    imports = {imp.strip() for imp in imports}
+            
+            return imports
+            
+        except Exception as e:
+            print(f"インポート抽出エラー: {e}")
+            return set()
     
     def _auto_complete_imports(self, file_path: str, code: str) -> str:
         """インポート自動チェックと補完"""

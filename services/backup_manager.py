@@ -7,7 +7,7 @@ import os
 import shutil
 import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Dict, Any, Optional
 
 class BackupManager:
     """バックアップ管理クラス"""
