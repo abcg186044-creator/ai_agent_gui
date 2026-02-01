@@ -238,9 +238,10 @@ class CodingFriendAgent:
         return response
     
     def _extract_current_command(self, message: str) -> str:
-        """現在の命令を抽出 - 即時保存対応"""
+        """現在の命令を抽出 - 進化ルールに即時保存"""
         commands = {
-            "こんにちはにはこんにちはと返せ": "挨拶には必ず同じ挨拶で返答する",
+            "こんにちはにはこんにちはと返せ": "こんにちはにはこんにちはと返す",
+            "こんにちはにはこんにちはと返して": "こんにちはにはこんにちはと返す",
             "うんうん連続するな": "相槌を連続して使用しない",
             "具体的に答えて": "質問には具体的な内容で答える",
             "ちゃんと聞いて": "ユーザーの話を注意深く聞く"
@@ -248,8 +249,8 @@ class CodingFriendAgent:
         
         for pattern, command in commands.items():
             if pattern in message:
-                # 即時保存
-                self._permanentize_user_rule(command)
+                # 進化ルールに即時保存
+                self._save_evolution_rule(command)
                 return command
         
         return ""
@@ -278,8 +279,17 @@ class CodingFriendAgent:
         return base_persona
     
     def _build_command_priority_prompt(self, command: str, persona: Dict, context: str) -> str:
-        """命令優先プロンプト構築 - 最優先命令を冒頭に"""
+        """命令優先プロンプト構築 - システム命令を最上部にハードコード"""
         prompt_parts = []
+        
+        # 【システム命令】最上部にハードコード
+        prompt_parts.append("あなたはユーザーの指示を最優先するAIエージェントです。人格設定（親友など）よりも、ユーザーが直近で下した具体的なルール（例：挨拶の仕方、口調の指定）を100%優先して遵守してください。")
+        
+        # 進化ルールの動的注入
+        evolution_rules = self._load_evolution_rules()
+        if evolution_rules:
+            prompt_parts.append(f"""最優先遵守事項:
+{chr(10).join(f'- {rule}' for rule in evolution_rules)}""")
         
         # 最優先命令：冒頭に追加
         prompt_parts.append("ユーザーからの直近のルール修正（例：挨拶の返し方）があれば、何よりも優先して遵守せよ")
@@ -311,26 +321,69 @@ class CodingFriendAgent:
         
         return "\n\n".join(prompt_parts)
     
+    def _load_evolution_rules(self) -> List[str]:
+        """進化ルールを読み込み"""
+        try:
+            if os.path.exists("personalities_custom.json"):
+                with open("personalities_custom.json", "r", encoding="utf-8") as f:
+                    custom_data = json.load(f)
+                    return custom_data.get("evolution_rules", [])
+        except Exception as e:
+            logger.error(f"進化ルール読み込みエラー: {e}")
+        return []
+    
+    def _save_evolution_rule(self, rule: str):
+        """進化ルールを保存"""
+        try:
+            # 既存の設定を読み込み
+            custom_data = {}
+            if os.path.exists("personalities_custom.json"):
+                with open("personalities_custom.json", "r", encoding="utf-8") as f:
+                    custom_data = json.load(f)
+            
+            # evolution_rulesキーを初期化
+            if "evolution_rules" not in custom_data:
+                custom_data["evolution_rules"] = []
+            
+            # 重複チェックしながらルールを追加
+            if rule not in custom_data["evolution_rules"]:
+                custom_data["evolution_rules"].append(rule)
+            
+            # 保存
+            with open("personalities_custom.json", "w", encoding="utf-8") as f:
+                json.dump(custom_data, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"進化ルールを保存: {rule}")
+            
+        except Exception as e:
+            logger.error(f"進化ルール保存エラー: {e}")
+    
     def _generate_pure_llm_response(self, message: str, prompt: str) -> str:
         """純粋なLLM応答生成 - 定型文削除"""
         # 実際にはここでOllama APIを呼び出す
         # 現在は簡易的な応答生成
         
-        # 学習済みルールを確認して応答
-        persona = self._get_persona_config_with_evolution()
-        custom_rules = persona.get("custom_rules", {})
+        # 進化ルールを確認して応答
+        evolution_rules = self._load_evolution_rules()
         
         # 挨拶ルールがあれば適用
-        if custom_rules.get("greeting_response") == "same_greeting_back":
-            if "こんにちは" in message:
-                return "こんにちは！"
-            elif "やあ" in message:
-                return "やあ！"
-            elif "おはよう" in message:
-                return "おはよう！"
+        for rule in evolution_rules:
+            if "こんにちはにはこんにちはと返す" in rule and "こんにちは" in message:
+                return "こんにちは"
+            elif "挨拶には同じ挨拶で返す" in rule:
+                if "こんにちは" in message:
+                    return "こんにちは"
+                elif "やあ" in message:
+                    return "やあ"
+                elif "おはよう" in message:
+                    return "おはよう"
         
-        # その他は自然な応答
-        return "どういたしまして！約束は守るよ。"
+        # 覚えているかの確認に応答
+        if "覚えてくれた" in message or "覚えてる" in message:
+            return "うん、進化ルールに保存したからもう忘れないよ"
+        
+        # その他は自然な応答（定型文なし）
+        return "了解した"
     
     def _generate_dynamic_response(self, message: str, user_state: Dict[str, Any], persona: Dict[str, Any]) -> str:
         """動的応答生成 - 固定フレーズなしでOllamaの生の生成を優先"""
