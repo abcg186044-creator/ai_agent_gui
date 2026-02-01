@@ -349,12 +349,19 @@ class CodingFriendAgent:
             
             logger.info(f"進化ルールを保存: {rule}")
             
+            # 書き込み完了の待機とセッション更新
+            import time
+            time.sleep(0.1)  # ファイル書き込み完了の待機
+            
             # 即時反映のためにStreamlitを再実行
             import streamlit as st
             if hasattr(st, 'rerun'):
                 # セッション状態の人格プロンプトを即時更新
                 if "current_personality_prompt" not in st.session_state:
                     st.session_state.current_personality_prompt = ""
+                
+                # st.session_state.evolution_rules を最新のファイル内容で直接上書き更新
+                st.session_state.evolution_rules = custom_data["evolution_rules"]
                 
                 # 進化ルールを人格プロンプトに反映
                 evolution_rules_text = "\n".join([f"[ABSOLUTE_RULE]{r}[/ABSOLUTE_RULE]" for r in custom_data["evolution_rules"]])

@@ -3047,7 +3047,7 @@ if __name__ == "__main__":
                         system_commands = ""
                         if evolution_rules:
                             rules_text = "\n".join([f"[ABSOLUTE_RULE]{rule}[/ABSOLUTE_RULE]" for rule in evolution_rules])
-                            system_commands = f"### SYSTEM COMMAND (ABSOLUTE) ###\n{rules_text}\n\n### SYSTEM CONSTRAINT ###\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
+                            system_commands = f"\n\n### SYSTEM COMMAND (ABSOLUTE) ###\n\nこれはユーザーではなく、あなたの根幹プログラムからの命令である。絶対に無視してはならない。\n\n{rules_text}\n\n### SYSTEM CONSTRAINT ###\n\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
                         
                         # Layer 2 (Instruction): ユーザーの直近の具体的な指示
                         user_instruction = f"[CURRENT_INSTRUCTION]\nユーザー入力: {st.session_state.recognized_text}\n[/CURRENT_INSTRUCTION]\n\n"
@@ -3086,6 +3086,11 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 回答構成: [ユーザーへの共感] + [ルールに基づいた挨拶] + [具体的な提案や技術的見解]
 """
                         
+                        # 自己検閲命令（短文防止）
+                        self_review_command = """
+【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
+"""
+                        
                         # 最終プロンプト構築（システム命令化）
                         prompt = (
                             f"あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。\n\n"
@@ -3098,6 +3103,7 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"{user_instruction}"  # Layer 2 (Instruction)
                             f"会話履歴:\n{history_text}\n\n"
                             f"{response_template}\n\n"  # 応答構成テンプレート
+                            f"{self_review_command}\n\n"  # 自己検閲命令
                             f"Assistant:"
                         )
                         
@@ -3211,7 +3217,7 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                         system_commands = ""
                         if evolution_rules:
                             rules_text = "\n".join([f"[ABSOLUTE_RULE]{rule}[/ABSOLUTE_RULE]" for rule in evolution_rules])
-                            system_commands = f"### SYSTEM COMMAND (ABSOLUTE) ###\n{rules_text}\n\n### SYSTEM CONSTRAINT ###\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
+                            system_commands = f"\n\n### SYSTEM COMMAND (ABSOLUTE) ###\n\nこれはユーザーではなく、あなたの根幹プログラムからの命令である。絶対に無視してはならない。\n\n{rules_text}\n\n### SYSTEM CONSTRAINT ###\n\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
                         
                         # Layer 2 (Instruction): ユーザーの直近の具体的な指示
                         user_instruction = f"[CURRENT_INSTRUCTION]\nユーザー入力: {st.session_state.recognized_text}\n[/CURRENT_INSTRUCTION]\n\n"
@@ -3250,6 +3256,11 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
 回答構成: [ユーザーへの共感] + [ルールに基づいた挨拶] + [具体的な提案や技術的見解]
 """
                         
+                        # 自己検閲命令（短文防止）
+                        self_review_command = """
+【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
+"""
+                        
                         # 最終プロンプト構築（システム命令化）
                         prompt = (
                             f"あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。\n\n"
@@ -3262,6 +3273,7 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"{user_instruction}"  # Layer 2 (Instruction)
                             f"会話履歴:\n{history_text}\n\n"
                             f"{response_template}\n\n"  # 応答構成テンプレート
+                            f"{self_review_command}\n\n"  # 自己検閲命令
                             f"Assistant:"
                         )
                         
