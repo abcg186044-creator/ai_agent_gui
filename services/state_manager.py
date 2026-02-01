@@ -8,6 +8,67 @@ import os
 import datetime
 from pathlib import Path
 from ..core.constants import *
+from ..core.file_map import file_resolver, get_relevant_files, should_load_file
+
+# ファイルキャッシュ（パフォーマンス向上）
+_file_cache = {}
+
+def load_file_with_cache(file_path: str, user_request: str = None) -> str:
+    """キャッシュ付きファイル読み込み"""
+    # ユーザー要求に基づいて読み込み必要性をチェック
+    if user_request and not should_load_file(file_path, user_request):
+        return ""
+    
+    # キャッシュチェック
+    if file_path in _file_cache:
+        cache_time, content = _file_cache[file_path]
+        file_mtime = Path(file_path).stat().st_mtime if Path(file_path).exists() else 0
+        
+        # ファイルが変更されていなければキャッシュを返す
+        if cache_time >= file_mtime:
+            return content
+    
+    # ファイル読み込み
+    try:
+        if Path(file_path).exists():
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # キャッシュに保存
+            file_mtime = Path(file_path).stat().st_mtime
+            _file_cache[file_path] = (file_mtime, content)
+            
+            return content
+        else:
+            return ""
+    except Exception as e:
+        print(f"ファイル読み込みエラー {file_path}: {e}")
+        return ""
+
+def clear_file_cache():
+    """ファイルキャッシュをクリア"""
+    global _file_cache
+    _file_cache.clear()
+
+def get_optimized_file_list(user_request: str) -> list:
+    """ユーザー要求に基づいて最適化されたファイルリストを取得"""
+    all_files = list(file_resolver.file_map.keys())
+    relevant_files = get_relevant_files(user_request)
+    
+    # 関連ファイルを優先し、残りを優先度順にソート
+    prioritized_files = []
+    
+    # 関連ファイルを先頭に追加
+    for file_path in relevant_files:
+        if file_path in all_files:
+            prioritized_files.append(file_path)
+    
+    # 残りのファイルを優先度順に追加
+    remaining_files = [f for f in all_files if f not in prioritized_files]
+    remaining_files = file_resolver.optimize_loading_order(remaining_files)
+    prioritized_files.extend(remaining_files)
+    
+    return prioritized_files
 
 def save_workspace_state():
     """ワークスペース状態を保存"""

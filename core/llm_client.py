@@ -9,6 +9,7 @@ import os
 from datetime import datetime
 from .constants import *
 from .self_mutation import ModularSelfMutationManager
+from .file_map import resolve_target_file, get_relevant_files
 
 class OllamaClient:
     def __init__(self, model_name="llama2", base_url="http://localhost:11434"):
@@ -66,18 +67,30 @@ class SelfEvolvingAgent:
         self.load_evolution_rules()
     
     def execute_self_mutation(self, user_request: str) -> Dict:
-        """自己改造を実行"""
+        """自己改造を実行（ファイルマップ対応版）"""
         try:
-            target_module = self.mutation_manager.detect_target_module(user_request)
+            # ファイルマップから対象モジュールを特定
+            target_module = resolve_target_file(user_request)
             
             if not target_module:
-                return {"success": False, "error": "改造対象を特定できません"}
+                # 従来のキーワードマッチングも試行
+                target_module = self.mutation_manager.detect_target_module(user_request)
+            
+            if not target_module:
+                return {
+                    "success": False,
+                    "error": "改造対象を特定できませんでした",
+                    "suggestion": "より具体的な指示（例：「デザインを変えて」「AIの性格を変えて」）を試してください"
+                }
             
             # 改造コードを生成
             mutation_code = self._generate_mutation_code(user_request, target_module)
             
             if not mutation_code:
-                return {"success": False, "error": "改造コード生成に失敗"}
+                return {
+                    "success": False,
+                    "error": "改造コードの生成に失敗しました"
+                }
             
             # 必要なimportを自動追加
             updated_code, new_imports = self.mutation_manager.auto_add_imports(target_module, mutation_code)
@@ -86,12 +99,28 @@ class SelfEvolvingAgent:
             success = self._apply_mutation(target_module, updated_code)
             
             if success:
-                return {"success": True, "target_module": target_module, "new_imports": new_imports}
+                # requirements.txtを更新
+                if new_imports:
+                    self.mutation_manager.update_requirements_txt(new_imports)
+                
+                return {
+                    "success": True,
+                    "target_module": target_module,
+                    "mutation_applied": True,
+                    "new_imports": new_imports,
+                    "message": f"{target_module} を正常に改造しました"
+                }
             else:
-                return {"success": False, "error": "ファイル書き換えに失敗"}
+                return {
+                    "success": False,
+                    "error": "ファイル書き換えに失敗しました"
+                }
                 
         except Exception as e:
-            return {"success": False, "error": f"自己改造エラー: {str(e)}"}
+            return {
+                "success": False,
+                "error": f"自己改造エラー: {str(e)}"
+            }
     
     def _generate_mutation_code(self, user_request: str, target_module: str) -> Optional[str]:
         """改造コードを生成"""
