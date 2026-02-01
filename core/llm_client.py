@@ -6,6 +6,7 @@ Ollamaとの通信、プロンプト構築、自己進化ロジックを管理
 import re
 import json
 import os
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from .constants import *
 from .self_mutation import ModularSelfMutationManager
@@ -73,6 +74,7 @@ class SelfEvolvingAgent:
             from services.app_generator import partial_mutation_manager
             from services.backup_manager import backup_manager
             from services.import_sync import import_synchronizer, module_validator
+            from .self_optimizer import evolution_logger
             
             # ターゲットファイルを特定
             target_file = resolve_target_file(user_request)
@@ -111,9 +113,12 @@ class SelfEvolvingAgent:
             ollama_client = st.session_state[SESSION_KEYS['ollama']]
             modified_code = ollama_client.generate_response(focused_prompt)
             
+            # インポート自動チェックと補完
+            enhanced_code = self._auto_complete_imports(target_file, modified_code)
+            
             # 特定ファイルのみを上書き保存
             mutation_result = partial_mutation_manager.apply_partial_mutation(
-                target_file, modified_code, target_function
+                target_file, enhanced_code, target_function
             )
             
             if mutation_result["success"]:
@@ -130,6 +135,7 @@ class SelfEvolvingAgent:
                     "target_function": target_function,
                     "sync_result": sync_result,
                     "validation_result": validation_result,
+                    "auto_imports_added": self._get_added_imports(modified_code, enhanced_code),
                     "message": f"{target_file} のみを正常に修正しました"
                 }
             else:
@@ -145,6 +151,121 @@ class SelfEvolvingAgent:
                 "success": False,
                 "error": f"局所的自己改造エラー: {str(e)}"
             }
+    
+    def _auto_complete_imports(self, file_path: str, code: str) -> str:
+        """インポート自動チェックと補完"""
+        try:
+            # 現在のインポートを抽出
+            existing_imports = self._extract_imports_from_file(file_path)
+            
+            # 新しいコードから必要なインポートを検出
+            required_imports = self._detect_required_imports(code)
+            
+            # 不足しているインポートを特定
+            missing_imports = required_imports - existing_imports
+            
+            if missing_imports:
+                # インポート文を生成
+                import_statements = self._generate_import_statements(missing_imports)
+                
+                # コードの先頭にインポートを追加
+                enhanced_code = import_statements + "\n\n" + code
+                
+                print(f"🔧 自動インポート追加: {missing_imports}")
+                return enhanced_code
+            
+            return code
+            
+        except Exception as e:
+            print(f"⚠️ インポート自動補完エラー: {e}")
+            return code
+    
+    def _extract_imports_from_file(self, file_path: str) -> set:
+        """ファイルから既存のインポートを抽出"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            imports = set()
+            lines = content.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if line.startswith('import '):
+                    imports.add(line.replace('import ', '').strip())
+                elif line.startswith('from '):
+                    imports.add(line.strip())
+            
+            return imports
+            
+        except Exception as e:
+            print(f"インポート抽出エラー: {e}")
+            return set()
+    
+    def _detect_required_imports(self, code: str) -> set:
+        """コードから必要なインポートを検出"""
+        imports = set()
+        
+        # 型ヒントの検出
+        if 'Dict' in code:
+            imports.add('from typing import Dict')
+        if 'List' in code:
+            imports.add('from typing import List')
+        if 'Optional' in code:
+            imports.add('from typing import Optional')
+        if 'Any' in code:
+            imports.add('from typing import Any')
+        if 'Tuple' in code:
+            imports.add('from typing import Tuple')
+        
+        # 一般的なライブラリの検出
+        if 'datetime' in code and 'from datetime' not in code:
+            imports.add('from datetime import datetime')
+        if 'Path' in code and 'from pathlib' not in code:
+            imports.add('from pathlib import Path')
+        if 'json' in code and 'import json' not in code:
+            imports.add('import json')
+        if 're' in code and 'import re' not in code:
+            imports.add('import re')
+        
+        return imports
+    
+    def _generate_import_statements(self, imports: set) -> str:
+        """インポート文を生成"""
+        statements = []
+        
+        # typing関連をまとめる
+        typing_imports = []
+        other_imports = []
+        
+        for imp in sorted(imports):
+            if imp.startswith('from typing'):
+                typing_imports.append(imp)
+            else:
+                other_imports.append(imp)
+        
+        # typingを一つにまとめる
+        if typing_imports:
+            typing_types = []
+            for imp in typing_imports:
+                if imp.startswith('from typing import '):
+                    typing_types.append(imp.replace('from typing import ', ''))
+            
+            if typing_types:
+                statements.append(f"from typing import {', '.join(sorted(typing_types))}")
+        
+        # その他のインポート
+        statements.extend(other_imports)
+        
+        return '\n'.join(statements)
+    
+    def _get_added_imports(self, original_code: str, enhanced_code: str) -> List[str]:
+        """追加されたインポートを取得"""
+        original_imports = self._detect_required_imports(original_code)
+        enhanced_imports = self._detect_required_imports(enhanced_code)
+        
+        added = enhanced_imports - original_imports
+        return sorted(list(added))
     
     def self_diagnose(self) -> Dict:
         """自分の全ソースコードを読み込み、自己診断を実行"""

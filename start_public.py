@@ -55,13 +55,29 @@ def start_streamlit_public():
     # ローカルIPを取得
     local_ip = get_local_ip()
     
+    # カレントディレクトリを確認
+    current_dir = Path.cwd()
+    main_app_path = current_dir / "main_app_new.py"
+    
+    if not main_app_path.exists():
+        print(f"❌ メインアプリが見つかりません: {main_app_path}")
+        print("カレントディレクトリ:", current_dir)
+        print("ファイル一覧:")
+        for file in current_dir.glob("*.py"):
+            print(f"  - {file.name}")
+        return False
+    
+    print(f"✅ メインアプリを確認: {main_app_path}")
+    
     # 起動コマンド
     cmd = [
         sys.executable, "-m", "streamlit", "run", "main_app_new.py",
         "--server.address", "0.0.0.0",
         "--server.port", "8502",
         "--server.headless", "false",
-        "--browser.gatherUsageStats", "false"
+        "--browser.gatherUsageStats", "false",
+        "--server.enableCORS", "false",
+        "--server.enableXsrfProtection", "false"
     ]
     
     print(f"🌐 ネットワークアクセスURL:")
@@ -73,17 +89,51 @@ def start_streamlit_public():
     print(f"   タブレット:     http://{local_ip}:8502")
     print()
     print("🔧 最新のモジュール版AI Agent VRM Systemを起動中...")
+    print(f"📁 作業ディレクトリ: {current_dir}")
+    print(f"🔧 コマンド: {' '.join(cmd)}")
+    print()
     
     try:
+        # 環境変数を設定
+        env = os.environ.copy()
+        env["STREAMLIT_SERVER_HEADLESS"] = "false"
+        env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+        
         # Streamlitを起動
-        subprocess.run(cmd, check=True)
-        return True
-    except subprocess.CalledProcessError as e:
+        process = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        print("✅ Streamlitプロセスを開始しました")
+        print("🌐 ブラウザでアクセスしてください...")
+        
+        # 出力を監視
+        while True:
+            output = process.stdout.readline()
+            if output == '' and process.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+        
+        # エラー出力を確認
+        stderr_output = process.stderr.read()
+        if stderr_output:
+            print("❌ エラー出力:")
+            print(stderr_output)
+        
+        return_code = process.poll()
+        if return_code == 0:
+            print("✅ 正常終了")
+        else:
+            print(f"❌ 終了コード: {return_code}")
+            
+        return return_code == 0
+        
+    except FileNotFoundError:
+        print("❌ Streamlitが見つかりません")
+        print("インストールコマンド: pip install streamlit")
+        return False
+    except Exception as e:
         print(f"❌ 起動エラー: {e}")
         return False
-    except KeyboardInterrupt:
-        print("\n👋 アプリケーションを停止しました")
-        return True
 
 if __name__ == "__main__":
     start_streamlit_public()

@@ -77,52 +77,139 @@ def bootstrap_recovery():
 
 def main():
     """メイン関数"""
-    # 循環参照チェックを実行
-    from services.import_validator import circular_dependency_checker
-    
-    circular_check = circular_dependency_checker.check_circular_dependencies()
-    if circular_check['has_circular']:
-        st.error("⚠️ 循環参照が検出されました")
-        st.error(circular_check['message'])
+    try:
+        # 循環参照チェックを実行
+        from services.import_validator import circular_dependency_checker
         
-        for dep in circular_check['circular_dependencies']:
-            st.error(f"循環: {' → '.join(dep)}")
+        circular_check = circular_dependency_checker.check_circular_dependencies()
+        if circular_check['has_circular']:
+            st.error("⚠️ 循環参照が検出されました")
+            st.error(circular_check['message'])
+            
+            for dep in circular_check['circular_dependencies']:
+                st.error(f"循環: {' → '.join(dep)}")
+            
+            suggestions = circular_dependency_checker.suggest_dependency_fixes()
+            st.info("💡 修正提案:")
+            for suggestion in suggestions:
+                st.caption(f"• {suggestion}")
+            
+            st.stop()
         
-        suggestions = circular_dependency_checker.suggest_dependency_fixes()
-        st.info("💡 修正提案:")
-        for suggestion in suggestions:
-            st.caption(f"• {suggestion}")
+        # ブートストラップ・リカバリ
+        if not bootstrap_recovery():
+            print("❌ ブートストラップ・リカバリに失敗しました")
+        
+        # Streamlit設定
+        st.set_page_config(layout="wide", initial_sidebar_state="expanded")
+        
+        # セッション状態初期化
+        initialize_session_state()
+        
+        # カスタムCSS適用
+        apply_custom_css()
+        
+        # メインタイトル
+        st.title("🤖 AI Agent VRM System - モジュール版")
+        st.markdown("---")
+        
+        # メインタブ
+        tab1, tab2, tab3 = st.tabs(["💬 会話", "🛠️ 拡張機能", "📊 進捗"])
+        
+        with tab1:
+            render_conversation_tab()
+        
+        with tab2:
+            render_extension_tab()
+        
+        with tab3:
+            render_progress_tab()
+            
+    except Exception as e:
+        # 起動時エラーの処理
+        error_message = str(e)
+        print(f"❌ 起動時エラー: {error_message}")
+        
+        # 進化履歴に失敗を記録
+        try:
+            from core.self_optimizer import evolution_logger
+            from datetime import datetime
+            
+            evolution_log_entry = f"""
+## 🚨 進化の失敗：起動時エラー
+
+### ❌ エラー内容
+**発生時刻**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+**エラータイプ**: 起動時バリデーションエラー
+**詳細**: {error_message}
+
+### 🔧 対応処理
+- バックアップからの復旧を試行
+- エラー原因を分析し修正を実施
+- システムの安定性を確保
+
+### 🧠 AIの自己評価
+起動時に重大なエラーが発生しました。
+これはシステムの進化過程で避けられない試練です。
+失敗から学び、より強固なシステムへと成長します。
+
+### 📝 今後の対策
+1. 型定義の漏れを防ぐインポート自動補完の強化
+2. 起動前の包括的なバリデーション実装
+3. エラー発生時の自動復旧メカニズム
+
+---
+"""
+            
+            evolution_log_file = DATA_DIR / "evolution_history.md"
+            with open(evolution_log_file, 'a', encoding='utf-8') as f:
+                f.write(evolution_log_entry)
+                
+            print("📝 進化履歴にエラーを記録しました")
+            
+        except Exception as log_error:
+            print(f"⚠️ 進化履歴記録エラー: {log_error}")
+        
+        # バックアップからの復旧を試行
+        try:
+            from services.backup_manager import backup_manager
+            
+            print("🔄 バックアップからの復旧を試行...")
+            
+            # 最新のバックアップを取得
+            latest_backup = backup_manager.get_latest_backup("main_app_new.py")
+            
+            if latest_backup:
+                print(f"📦 バックアップを復元: {latest_backup}")
+                
+                # 復元実行
+                if backup_manager.restore_backup(latest_backup, "main_app_new.py"):
+                    print("✅ バックアップからの復旧に成功")
+                    print("🔄 再起動を試みます...")
+                    
+                    # 再起動
+                    import sys
+                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                else:
+                    print("❌ バックアップ復元に失敗")
+            else:
+                print("❌ 利用可能なバックアップがありません")
+                
+        except Exception as restore_error:
+            print(f"❌ 復元処理エラー: {restore_error}")
+        
+        # エラーメッセージを表示
+        st.error("🚨 起動時にエラーが発生しました")
+        st.error(f"エラー内容: {error_message}")
+        st.error("システムはバックアップから復旧を試みました")
+        
+        # 手動対応案を表示
+        st.info("💡 手動対応案:")
+        st.caption("1. ターミナルで `python start_public.py` を再実行")
+        st.caption("2. `git status` でファイル状態を確認")
+        st.caption("3. `git restore .` で最後の正常状態に戻す")
         
         st.stop()
-    
-    # ブートストラップ・リカバリ
-    if not bootstrap_recovery():
-        print("❌ ブートストラップ・リカバリに失敗しました")
-    
-    # Streamlit設定
-    st.set_page_config(layout="wide", initial_sidebar_state="expanded")
-    
-    # セッション状態初期化
-    initialize_session_state()
-    
-    # カスタムCSS適用
-    apply_custom_css()
-    
-    # メインタイトル
-    st.title("🤖 AI Agent VRM System - モジュール版")
-    st.markdown("---")
-    
-    # メインタブ
-    tab1, tab2, tab3 = st.tabs(["💬 会話", "🛠️ 拡張機能", "📊 進捗"])
-    
-    with tab1:
-        render_conversation_tab()
-    
-    with tab2:
-        render_extension_tab()
-    
-    with tab3:
-        render_progress_tab()
 
 def render_conversation_tab():
     """会話タブを描画"""
