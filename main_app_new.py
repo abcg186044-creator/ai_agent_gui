@@ -34,30 +34,30 @@ def initialize_session_state():
         st.session_state[SESSION_KEYS['ollama']] = None
     if SESSION_KEYS['conversation_history'] not in st.session_state:
         st.session_state[SESSION_KEYS['conversation_history']] = []
-    
-    # VRM制御状態
+    if SESSION_KEYS['todo_list'] not in st.session_state:
+        st.session_state[SESSION_KEYS['todo_list']] = []
+    if SESSION_KEYS['workspace_state'] not in st.session_state:
+        st.session_state[SESSION_KEYS['workspace_state']] = {}
+    if SESSION_KEYS['agent_diary'] not in st.session_state:
+        st.session_state[SESSION_KEYS['agent_diary']] = []
     if SESSION_KEYS['vrm_controller'] not in st.session_state:
         st.session_state[SESSION_KEYS['vrm_controller']] = VRMAvatarController()
-    
-    # 自己進化エージェント
     if "evolution_agent" not in st.session_state:
         st.session_state.evolution_agent = SelfEvolvingAgent()
-    
     if "ai_evolution_agent" not in st.session_state:
         st.session_state.ai_evolution_agent = SelfEvolvingAgent()
-    
     if "conversational_evolution_agent" not in st.session_state:
         st.session_state.conversational_evolution_agent = ConversationalEvolutionAgent()
-    
-    # 多言語プログラミングサポート
     if "code_generator" not in st.session_state:
         st.session_state.code_generator = MultiLanguageCodeGenerator()
-    
-    # アプリ実行状態
     if SESSION_KEYS['active_app'] not in st.session_state:
         st.session_state[SESSION_KEYS['active_app']] = None
     if SESSION_KEYS['show_app_inline'] not in st.session_state:
         st.session_state[SESSION_KEYS['show_app_inline']] = False
+    
+    # エージェント名の初期化
+    if 'agent_name' not in st.session_state:
+        st.session_state['agent_name'] = AGENT_NAME
 
 def bootstrap_recovery():
     """ブートストラップ・リカバリ"""
@@ -113,8 +113,9 @@ def main():
         # カスタムCSS適用
         apply_custom_css()
         
-        # メインタイトル
-        st.title("🤖 AI Agent VRM System - モジュール版")
+        # メインタイトル（動的）
+        agent_name = st.session_state.get('agent_name', AGENT_NAME)
+        st.title(f"🤖 {agent_name} - モジュール版")
         st.markdown("---")
         
         # メインタブ

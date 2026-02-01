@@ -122,13 +122,16 @@ class SelfEvolvingAgent:
             )
             
             if mutation_result["success"]:
+                # 命名プロトコルのチェック
+                name_change_result = self._check_and_apply_naming_protocol(user_request, enhanced_code)
+                
                 # インポート同期を実行
                 sync_result = import_synchronizer.sync_imports_after_mutation(target_file)
                 
                 # モジュールバリデーションを実行
                 validation_result = module_validator.validate_all_modules()
                 
-                return {
+                result = {
                     "success": True,
                     "target_file": target_file,
                     "backup_path": backup_path,
@@ -138,6 +141,15 @@ class SelfEvolvingAgent:
                     "auto_imports_added": self._get_added_imports(modified_code, enhanced_code),
                     "message": f"{target_file} のみを正常に修正しました"
                 }
+                
+                # 名前変更があった場合は結果に追加
+                if name_change_result["name_changed"]:
+                    result.update(name_change_result)
+                    # セッション状態を更新して再起動
+                    st.session_state['agent_name'] = name_change_result['new_name']
+                    result["message"] += f"\\n🎯 エージェント名を「{name_change_result['new_name']}」に変更しました"
+                
+                return result
             else:
                 return {
                     "success": False,
@@ -151,6 +163,75 @@ class SelfEvolvingAgent:
                 "success": False,
                 "error": f"局所的自己改造エラー: {str(e)}"
             }
+    
+    def _check_and_apply_naming_protocol(self, user_request: str, modified_code: str) -> Dict:
+        """命名プロトコルをチェックして適用"""
+        try:
+            # 名前変更の要求を検出
+            name_change_keywords = ["名前を", "改名", "名称変更", "アイデンティティ", "呼び方"]
+            
+            if any(keyword in user_request for keyword in name_change_keywords):
+                # 新しい名前を抽出
+                new_name = self._extract_new_name(user_request)
+                
+                if new_name and new_name != AGENT_NAME:
+                    # core/constants.pyのAGENT_NAMEを書き換え
+                    constants_file = "core/constants.py"
+                    
+                    with open(constants_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    # AGENT_NAMEの値を置換
+                    updated_content = re.sub(
+                        r'AGENT_NAME = ["\'][^"\']+["\']',
+                        f'AGENT_NAME = "{new_name}"',
+                        content
+                    )
+                    
+                    with open(constants_file, 'w', encoding='utf-8') as f:
+                        f.write(updated_content)
+                    
+                    print(f"🎯 エージェント名を「{new_name}」に変更しました")
+                    
+                    return {
+                        "name_changed": True,
+                        "new_name": new_name,
+                        "old_name": AGENT_NAME,
+                        "constants_file": constants_file
+                    }
+            
+            return {"name_changed": False}
+            
+        except Exception as e:
+            print(f"命名プロトコルエラー: {e}")
+            return {"name_changed": False}
+    
+    def _extract_new_name(self, user_request: str) -> Optional[str]:
+        """ユーザー要求から新しい名前を抽出"""
+        try:
+            # 名前を抽出するパターン
+            patterns = [
+                r'名前を「([^」]+)」に',
+                r'改名して「([^」]+)」',
+                r'名称を「([^」]+)」に',
+                r'「([^」]+)」と呼んで',
+                r'アイデンティティは「([^」]+)」',
+                r'「([^」]+)」という名前'
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, user_request)
+                if match:
+                    new_name = match.group(1).strip()
+                    # 名前のバリデーション
+                    if len(new_name) > 0 and len(new_name) <= 20:
+                        return new_name
+            
+            return None
+            
+        except Exception as e:
+            print(f"名前抽出エラー: {e}")
+            return None
     
     def _auto_complete_imports(self, file_path: str, code: str) -> str:
         """インポート自動チェックと補完"""

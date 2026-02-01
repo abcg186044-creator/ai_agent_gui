@@ -5,7 +5,84 @@ LINE風CSSやテーマ設定（ベージュ・茶色）を管理
 
 from .constants import UI_COLORS, UI_STYLES, COMPONENT_STYLES, THEMES
 
-def get_line_chat_css():
+def get_gliding_mode_css():
+    """滑空モードのCSSを取得"""
+    return f"""
+    <style>
+    .gliding-mode {{
+        background: linear-gradient(135deg, #87CEEB 0%, #98FB98 50%, #F0E68C 100%);
+        animation: gliding-gradient 8s ease-in-out infinite;
+        transition: all 0.5s ease;
+    }}
+    
+    @keyframes gliding-gradient {{
+        0% {{ background-position: 0% 50%; }}
+        25% {{ background-position: 100% 50%; }}
+        50% {{ background-position: 100% 100%; }}
+        75% {{ background-position: 0% 100%; }}
+        100% {{ background-position: 0% 50%; }}
+    }}
+    
+    .gliding-avatar {{
+        animation: gliding-float 3s ease-in-out infinite;
+        transform-origin: center bottom;
+    }}
+    
+    @keyframes gliding-float {{
+        0%, 100% {{ transform: translateY(0px) rotate(0deg); }}
+        25% {{ transform: translateY(-10px) rotate(-2deg); }}
+        75% {{ transform: translateY(-5px) rotate(2deg); }}
+    }}
+    
+    .gliding-chat {{
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        border: 2px solid rgba(135, 206, 235, 0.5);
+        box-shadow: 0 8px 32px rgba(31, 38, 135, 0.2);
+    }}
+    
+    .gliding-button {{
+        background: linear-gradient(45deg, #87CEEB, #98FB98);
+        border: none;
+        color: white;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }}
+    
+    .gliding-button:hover {{
+        transform: scale(1.05);
+        box-shadow: 0 5px 15px rgba(135, 206, 235, 0.4);
+    }}
+    </style>
+    """
+
+def apply_gliding_mode():
+    """滑空モードを適用"""
+    css = get_gliding_mode_css()
+    st.markdown(css, unsafe_allow_html=True)
+    
+    # VRMアバターに滑空アニメーションを適用
+    if 'vrm_controller' in st.session_state:
+        vrm_controller = st.session_state['vrm_controller']
+        vrm_controller.set_expression("happy")  # 滑空中は楽しい表情
+    
+    # 背景を滑空モードに設定
+    st.markdown('<div class="gliding-mode">', unsafe_allow_html=True)
+    
+    return True
+
+def disable_gliding_mode():
+    """滑空モードを無効化"""
+    # 通常のCSSに戻す
+    css = get_line_chat_css()
+    st.markdown(css, unsafe_allow_html=True)
+    
+    # VRMアバターを通常表情に戻す
+    if 'vrm_controller' in st.session_state:
+        vrm_controller = st.session_state['vrm_controller']
+        vrm_controller.set_expression("neutral")
+    
+    return True
     """LINE風チャットのCSSを取得"""
     return f"""
     <style>
