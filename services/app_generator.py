@@ -197,9 +197,12 @@ class PartialMutationManager:
                 success = True
             
             if success:
+                # 物理ガード（プレフィックス強制）：ファイル書き込み直前にインポートをチェック・注入
+                protected_content = self._apply_streamlit_prefix_guard(modified_content)
+                
                 # 変更を保存
                 with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(modified_content)
+                    f.write(protected_content)
                 
                 return {
                     "success": True,
@@ -219,6 +222,28 @@ class PartialMutationManager:
                 "success": False,
                 "error": f"局所的書き換えエラー: {str(e)}"
             }
+    
+    def _apply_streamlit_prefix_guard(self, content: str) -> str:
+        """物理ガード（プレフィックス強制）：streamlitインポートを強制注入"""
+        try:
+            # 書き込もうとしている文字列をチェック
+            if 'import streamlit as st' not in content:
+                print(f"🛡️ 物理ガード：streamlitインポートを強制注入")
+                print(f"   元の文字列長: {len(content)}文字")
+                
+                # 強制注入：先頭にstreamlitインポートを結合
+                protected_content = 'import streamlit as st\n' + content
+                
+                print(f"   注入後の文字列長: {len(protected_content)}文字")
+                return protected_content
+            else:
+                print(f"✅ 物理ガード：streamlitインポートを確認")
+                return content
+                
+        except Exception as e:
+            print(f"⚠️ 物理ガードエラー: {e}")
+            # エラー時でもstreamlitインポートを強制注入
+            return 'import streamlit as st\n' + content
     
     def _replace_function(self, content: str, function_name: str, new_code: str) -> tuple:
         """関数を置換"""
