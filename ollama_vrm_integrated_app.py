@@ -3036,12 +3036,28 @@ if __name__ == "__main__":
                         evolution_rules = []
                         try:
                             import json
-                            if os.path.exists("personalities_custom.json"):
-                                with open("personalities_custom.json", "r", encoding="utf-8") as f:
-                                    custom_data = json.load(f)
-                                    evolution_rules = custom_data.get("evolution_rules", [])
+                            # セッション状態からのキャッシュを優先
+                            if "evolution_rules_cache" in st.session_state:
+                                evolution_rules = st.session_state.evolution_rules_cache
+                            else:
+                                # ファイルからの読み込み（例外ハンドリング強化）
+                                if os.path.exists("personalities_custom.json"):
+                                    try:
+                                        with open("personalities_custom.json", "r", encoding="utf-8") as f:
+                                            custom_data = json.load(f)
+                                            evolution_rules = custom_data.get("evolution_rules", [])
+                                            # セッション状態にキャッシュ
+                                            st.session_state.evolution_rules_cache = evolution_rules
+                                    except (json.JSONDecodeError, IOError, PermissionError) as e:
+                                        print(f"進化ルールファイル読み込みエラー: {e}")
+                                        evolution_rules = []  # 空のリストを返してアプリが落ちないようにガード
+                                        st.session_state.evolution_rules_cache = []
+                                else:
+                                    st.session_state.evolution_rules_cache = []
                         except Exception as e:
                             print(f"進化ルール読み込みエラー: {e}")
+                            evolution_rules = []
+                            st.session_state.evolution_rules_cache = []
                         
                         # システム命令セクション（最優先）
                         system_commands = ""
@@ -3109,6 +3125,7 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"{self_review_command}\n\n"  # 自己検閲命令
                             f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
                             f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
+                            f"### RESPONSE START ###\n"  # 回答開始位置の明確な誘導
                             f"応答:"  # 回答開始
                         )
                         
@@ -3211,12 +3228,28 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                         evolution_rules = []
                         try:
                             import json
-                            if os.path.exists("personalities_custom.json"):
-                                with open("personalities_custom.json", "r", encoding="utf-8") as f:
-                                    custom_data = json.load(f)
-                                    evolution_rules = custom_data.get("evolution_rules", [])
+                            # セッション状態からのキャッシュを優先
+                            if "evolution_rules_cache" in st.session_state:
+                                evolution_rules = st.session_state.evolution_rules_cache
+                            else:
+                                # ファイルからの読み込み（例外ハンドリング強化）
+                                if os.path.exists("personalities_custom.json"):
+                                    try:
+                                        with open("personalities_custom.json", "r", encoding="utf-8") as f:
+                                            custom_data = json.load(f)
+                                            evolution_rules = custom_data.get("evolution_rules", [])
+                                            # セッション状態にキャッシュ
+                                            st.session_state.evolution_rules_cache = evolution_rules
+                                    except (json.JSONDecodeError, IOError, PermissionError) as e:
+                                        print(f"進化ルールファイル読み込みエラー: {e}")
+                                        evolution_rules = []  # 空のリストを返してアプリが落ちないようにガード
+                                        st.session_state.evolution_rules_cache = []
+                                else:
+                                    st.session_state.evolution_rules_cache = []
                         except Exception as e:
                             print(f"進化ルール読み込みエラー: {e}")
+                            evolution_rules = []
+                            st.session_state.evolution_rules_cache = []
                         
                         # システム命令セクション（最優先）
                         system_commands = ""
@@ -3284,6 +3317,7 @@ AI: 「大変だったね！どんなエラーメッセージが出たか教え�
                             f"{self_review_command}\n\n"  # 自己検閲命令
                             f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
                             f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
+                            f"### RESPONSE START ###\n"  # 回答開始位置の明確な誘導
                             f"応答:"  # 回答開始
                         )
                         

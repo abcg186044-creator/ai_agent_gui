@@ -343,11 +343,15 @@ class CodingFriendAgent:
             if rule not in custom_data["evolution_rules"]:
                 custom_data["evolution_rules"].append(rule)
             
-            # 保存
-            with open("personalities_custom.json", "w", encoding="utf-8") as f:
-                json.dump(custom_data, f, ensure_ascii=False, indent=2)
-            
-            logger.info(f"進化ルールを保存: {rule}")
+            # 保存（例外ハンドリング強化）
+            try:
+                with open("personalities_custom.json", "w", encoding="utf-8") as f:
+                    json.dump(custom_data, f, ensure_ascii=False, indent=2)
+                logger.info(f"進化ルールを保存: {rule}")
+            except (IOError, PermissionError, json.JSONEncodeError) as e:
+                logger.error(f"進化ルールファイル書き込みエラー: {e}")
+                # ファイル書き込み失敗時でもセッション状態は更新する
+                pass
             
             # 書き込み完了の待機とセッション更新
             import time
@@ -362,6 +366,9 @@ class CodingFriendAgent:
                 
                 # st.session_state.evolution_rules を最新のファイル内容で直接上書き更新
                 st.session_state.evolution_rules = custom_data["evolution_rules"]
+                
+                # セッション状態へのキャッシュ（高速化）
+                st.session_state.evolution_rules_cache = custom_data["evolution_rules"]
                 
                 # 進化ルールを人格プロンプトに反映
                 evolution_rules_text = "\n".join([f"[ABSOLUTE_RULE]{r}[/ABSOLUTE_RULE]" for r in custom_data["evolution_rules"]])
@@ -383,8 +390,8 @@ class CodingFriendAgent:
                 
                 logger.info("進化ルールをセッション状態に即時同期 - 変数参照を一元化")
                 
-                # UIフィードバック - ユーザーに変化を実感させる
-                st.success("🧬 思考回路がアップデートされました")
+                # UIフィードバック - 画面を汚さないようにtoastで表示
+                st.toast("🧬 思考回路がアップデートされました", icon="✅")
                 
                 st.rerun()
             
