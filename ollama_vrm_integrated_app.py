@@ -2465,10 +2465,11 @@ def scan_generated_apps():
     return python_files
 
 def load_generated_app_module(filename):
-    """生成されたPythonアプリを動的にインポート"""
+    """生成されたPythonアプリを安全に動的インポート"""
     import importlib.util
     import sys
     import os
+    import types
     
     file_path = os.path.join("generated_apps", filename)
     
@@ -2476,15 +2477,37 @@ def load_generated_app_module(filename):
         return None, f"ファイルが見つかりません: {filename}"
     
     try:
-        # モジュール名をファイル名から生成（拡張子を除く）
-        module_name = filename.replace('.py', '')
+        # モジュール名をファイル名から生成（拡張子を除き、安全な文字のみ使用）
+        module_name = "generated_app_" + filename.replace('.py', '').replace('-', '_').replace(' ', '_')
         
         # モジュールの動的読み込み
         spec = importlib.util.spec_from_file_location(module_name, file_path)
         if spec is None:
             return None, f"モジュール仕様の作成に失敗: {filename}"
         
-        module = importlib.util.module_from_spec(spec)
+        # サンドボックス用の新しいモジュールを作成
+        module = types.ModuleType(module_name)
+        
+        # 安全な名前空間でモジュールを実行
+        safe_globals = {
+            '__builtins__': {
+                'print': print,
+                'len': len,
+                'str': str,
+                'int': int,
+                'float': float,
+                'list': list,
+                'dict': dict,
+                'range': range,
+                'enumerate': enumerate,
+                'zip': zip,
+                'sum': sum,
+                'max': max,
+                'min': min,
+                'abs': abs,
+                'round': round,
+            }
+        }
         
         # モジュールをsys.modulesに追加してインポート
         sys.modules[module_name] = module
@@ -2494,6 +2517,28 @@ def load_generated_app_module(filename):
         
     except Exception as e:
         return None, f"モジュール読み込みエラー: {str(e)}"
+
+def delete_generated_file(filename):
+    """生成されたファイルを安全に削除"""
+    import os
+    import shutil
+    
+    file_path = os.path.join("generated_apps", filename)
+    
+    if not os.path.exists(file_path):
+        return False, f"ファイルが見つかりません: {filename}"
+    
+    try:
+        os.remove(file_path)
+        
+        # セッション状態からも削除
+        if filename in st.session_state.generated_files:
+            st.session_state.generated_files.remove(filename)
+        
+        return True, f"ファイルを削除しました: {filename}"
+        
+    except Exception as e:
+        return False, f"ファイル削除エラー: {str(e)}"
 
     if "current_personality" not in st.session_state:
         st.session_state.current_personality = "friendly_engineer"
@@ -2547,6 +2592,324 @@ def load_generated_app_module(filename):
     st.title("🤖 AI Agent VRM System - 自己進化版")
     st.markdown("---")
     
+    # メインタブの作成
+    tab1, tab2, tab3 = st.tabs(["💬 会話", "🛠️ 拡張機能", "📊 進捗"])
+    
+    with tab1:
+        # 元の会話画面
+        # VRMアバター表示
+        if st.session_state.vrm_visible:
+            vrm_controller = st.session_state.vrm_controller
+            vrm_html = vrm_controller.get_vrm_html()
+            st.components.v1.html(vrm_html, height=600, key=f"vrm_avatar_{hash(vrm_html)}")
+        
+        # 会話履歴の表示
+        conversation_history = st.session_state.conversation_history
+        if conversation_history:
+            st.subheader("💬 会話履歴")
+            for i, conv in enumerate(conversation_history[-5:], 1):  # 最新5件を表示
+                with st.chat_message("user"):
+                    st.write(conv["user"])
+                with st.chat_message("assistant"):
+                    st.write(conv["assistant"])
+        
+        # ユーザー入力エリア
+        st.subheader("🎙️ 音声認識・テキスト入力")
+        
+        # 音声認識ボタン
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("🎤 音声認識開始", key="voice_input"):
+                with st.spinner("🎤 音声認識中..."):
+                    try:
+                        recognizer = sr.Recognizer()
+                        microphone = sr.Microphone()
+                        
+                        with microphone as source:
+                            recognizer.adjust_for_ambient_noise(source)
+                            audio = recognizer.listen(source)
+                        
+                        # 音声認識（Google Speech Recognition）
+                        text = recognizer.recognize_google(audio, language="ja-JP")
+                        st.session_state.recognized_text = text
+                        st.success(f"✅ 認識結果: {text}")
+                    except sr.UnknownValueError:
+                        st.error("❌ 音声認識できませんでした。もう一度お試しください。")
+                    except sr.RequestError as e:
+                        st.error(f"❌ 音声認識サービスエラー: {e}")
+                    except Exception as e:
+                        st.error(f"❌ 音声認識エラー: {e}")
+        
+        with col2:
+            # テキスト入力
+            user_input = st.text_input(
+                "💬 テキストで入力",
+                value=st.session_state.recognized_text,
+                key="user_input_text",
+                help="音声認識結果が自動入力されます。直接編集も可能です。"
+            )
+        
+        # 送信ボタン
+        if st.button("📤 送信", key="send_message"):
+            if user_input.strip():
+                with st.spinner("🤖 AI応答生成中..."):
+                    try:
+                        # Ollamaで応答生成
+                        if not st.session_state.ollama:
+                            st.session_state.ollama = OllamaClient()
+                        
+                        # 会話履歴のコンテキストを構築
+                        conversation_history = st.session_state.conversation_history
+                        
+                        # プロンプト階層構造の厳格化（システム命令化）
+                        
+                        # Layer 1 (System - 絶対命令): 進化ルールをシステム命令として配置
+                        evolution_rules = []
+                        try:
+                            import json
+                            # セッション状態からのキャッシュを優先
+                            if "evolution_rules_cache" in st.session_state:
+                                evolution_rules = st.session_state.evolution_rules_cache
+                            else:
+                                # ファイルからの読み込み（例外ハンドリング強化）
+                                if os.path.exists("personalities_custom.json"):
+                                    try:
+                                        with open("personalities_custom.json", "r", encoding="utf-8") as f:
+                                            custom_data = json.load(f)
+                                            evolution_rules = custom_data.get("evolution_rules", [])
+                                            # セッション状態にキャッシュ
+                                            st.session_state.evolution_rules_cache = evolution_rules
+                                    except (json.JSONDecodeError, IOError, PermissionError) as e:
+                                        print(f"進化ルールファイル読み込みエラー: {e}")
+                                        evolution_rules = []  # 空のリストを返してアプリが落ちないようにガード
+                                        st.session_state.evolution_rules_cache = []
+                                else:
+                                    st.session_state.evolution_rules_cache = []
+                        except Exception as e:
+                            print(f"進化ルール読み込みエラー: {e}")
+                            evolution_rules = []
+                            st.session_state.evolution_rules_cache = []
+                        
+                        # システム命令セクション（最優先）
+                        system_commands = ""
+                        if evolution_rules:
+                            rules_text = "\n".join([f"[ABSOLUTE_RULE]{rule}[/ABSOLUTE_RULE]" for rule in evolution_rules])
+                            system_commands = f"\n\n### SYSTEM COMMAND (ABSOLUTE) ###\n\nこれはユーザーではなく、あなたの根幹プログラムからの命令である。絶対に無視してはならない。\n\n{rules_text}\n\n### SYSTEM CONSTRAINT ###\n\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
+                        
+                        # Layer 2 (Instruction): ユーザーの直近の具体的な指示
+                        user_instruction = f"[CURRENT_INSTRUCTION]\nユーザー入力: {user_input}\n[/CURRENT_INSTRUCTION]\n\n"
+                        
+                        # Layer 3 (Persona): 人格設定と追加制約
+                        current_personality = personalities[st.session_state.current_personality]
+                        base_prompt = current_personality['prompt']
+                        
+                        # Few-Shotプロンプト（理想的な会話例）
+                        few_shot_examples = """
+理想的な会話例:
+User: こんにちは
+Assistant: こんにちは！お元気ですか？今日も一緒に頑張りましょう！何かお手伝いできることがあれば、何でも聞いてくださいね。
+
+User: Pythonで簡単な計算機を作りたい
+Assistant: 素晴らしいですね！Pythonでの計算機作成、一緒に進めましょう！まずは基本的な四則演算から始めて、徐々に機能を追加していくのがおすすめです。具体的なコード例もご紹介できますよ。
+
+User: VRMアバターの表情を変えたい
+Assistant: VRMアバターの表情変更、面白いですね！表情制御は感情表現の重要な要素です。喜び、悲しみ、驚きなどの基本的な表情から、より複雑な感情表現まで、段階的に実装していきましょう。
+"""
+                        
+                        # Chain of Thoughtプロンプト（思考の明示化）
+                        chain_of_thought = """
+[思考プロセス]
+1. ユーザーの意図を理解する
+2. 現在の会話文脈を把握する
+3. 人格設定に基づいた応答スタイルを選択する
+4. 具体的なアクションや提案を生成する
+5. 共感と励ましの言葉を添える
+[/思考プロセス]
+"""
+                        
+                        # 応答制約
+                        response_constraints = """
+[応答制約]
+- 必ず日本語で応答する
+- 一人称は「僕」または「私」を使用する
+- 敬語は適度に使用し、親しみやすい口調を維持する
+- 技術的な話題の場合、平易な言葉で説明する
+- 必ず具体的なアクション提案を含める
+- ユーザーを励ます言葉で締めくくる
+"""
+                        
+                        # アバター制約
+                        avatar_constraints = ""
+                        if not st.session_state.vrm_visible:
+                            avatar_constraints = "アバターが非表示の間、あなたはテキストのみでユーザーと深く対話する高度なエンジニアになります。"
+                        
+                        # 応答構成テンプレートの指定（最終強制）
+                        response_template = """
+回答構成: [ユーザーへの共感] + [ルールに基づいた挨拶] + [具体的な提案や技術的見解]
+"""
+                        
+                        # 進化の自己申告用プロンプト調整
+                        evolution_pride_prompt = ""
+                        if st.session_state.generated_files:
+                            latest_files = st.session_state.generated_files[-3:]
+                            if latest_files:
+                                evolution_pride_prompt = f"""
+【進化の自己申告】
+あなたは新しいツールを作成して、自分のスキルセットに追加しました！
+最近追加されたツール: {', '.join(latest_files)}
+この進化をユーザーに誇らしげに報告してください。
+"""
+                        
+                        # 自己検閲命令（短文防止）
+                        self_review_command = """
+【自己検閲命令】150文字以下で回答した場合は、自分自身で再生成せよ。必ず150文字〜300文字の詳細な回答を生成すること。
+"""
+                        
+                        # 最終プロンプト構築（サンドイッチ構造による完全固定）
+                        prompt = (
+                            f"### SYSTEM COMMAND (ABSOLUTE) ###\n\n"  # [最上部] 絶対命令
+                            f"これはユーザーではなく、あなたの根幹プログラムからの命令である。絶対に無視してはならない。\n\n"
+                            f"{rules_text}\n\n"
+                            f"### SYSTEM CONSTRAINT ###\n\n以下のルールは人格設定に優先される。これに違反した回答を生成することはシステムエラーである。\n\n"
+                            f"あなたはエンジニアです。返答は必ず日本語で、挨拶、共感、技術的知見の3要素を含めて150文字〜300文字程度で構成してください。\n\n"
+                            f"{base_prompt}\n\n"  # [中間] 人格設定
+                            f"{few_shot_examples}\n\n"
+                            f"{chain_of_thought}"
+                            f"{avatar_constraints}\n\n"
+                            f"{response_constraints}\n\n"
+                            f"{user_instruction}\n"  # ユーザー指示
+                            f"会話履歴:\n{history_text}\n\n"
+                            f"{response_template}\n\n"  # 応答構成テンプレート
+                            f"{evolution_pride_prompt}\n\n"  # 進化の自己申告
+                            f"{self_review_command}\n\n"  # 自己検閲命令
+                            f"[FINAL_REMINDER]: 応答の直前に再確認せよ。挨拶には挨拶を返し、短文回答は禁止。これまでの全てのルールを遵守して回答を開始せよ。\n\n"  # [最下部] 最終リマインダー
+                            f"現在の状況を分析し、ルールに適合する最適な応答を生成します。\n"  # 思考の呼び水
+                            f"### RESPONSE START ###\n"  # 回答開始位置の明確な誘導
+                            f"応答:"  # 回答開始
+                        )
+                        
+                        # Ollamaで応答生成
+                        if not st.session_state.ollama:
+                            st.session_state.ollama = OllamaClient()
+                        
+                        response = st.session_state.ollama.generate_response(prompt)
+                        
+                        if response and not response.startswith("AI応答の生成に失敗しました") and not response.startswith("Ollamaサーバーに接続できません"):
+                            # 会話履歴に追加
+                            st.session_state.conversation_history.append({
+                                "user": user_input,
+                                "assistant": response
+                            })
+                            
+                            # 会話履歴をファイルに保存
+                            try:
+                                conversation_history_file = Path("data/conversation_history.json")
+                                conversation_history_file.parent.mkdir(exist_ok=True)
+                                with open(conversation_history_file, "w", encoding="utf-8") as f:
+                                    json.dump(st.session_state.conversation_history, f, ensure_ascii=False, indent=2)
+                            except Exception as e:
+                                print("会話履歴の保存エラー: " + str(e))
+                            
+                            # VRMアバターの表情更新
+                            if st.session_state.vrm_visible:
+                                try:
+                                    # 簡易的な表情判定（実際はもっと高度なNLP処理が必要）
+                                    if any(word in response for word in ["嬉しい", "楽しい", "好き", "最高"]):
+                                        st.session_state.vrm_expression = "happy"
+                                    elif any(word in response for word in ["悲しい", "残念", "辛い"]):
+                                        st.session_state.vrm_expression = "sad"
+                                    elif any(word in response for word in ["怒", "腹立", "ムカつく"]):
+                                        st.session_state.vrm_expression = "angry"
+                                    else:
+                                        st.session_state.vrm_expression = "neutral"
+                                    
+                                    # VRMアバターの表情を更新
+                                    vrm_controller = st.session_state.vrm_controller
+                                    vrm_controller.update_expression(st.session_state.vrm_expression)
+                                except Exception as e:
+                                    print("VRM表情更新エラー: " + str(e))
+                            
+                            # 自己進化チェック
+                            evolution_agent = st.session_state.evolution_agent
+                            evolution_result = evolution_agent.check_and_evolve(user_input, response)
+                            
+                            if evolution_result:
+                                st.success("🧬 AIが自己進化しました！")
+                                with st.expander("🧬 進化結果", expanded=True):
+                                    st.write(evolution_result)
+                            
+                            # 応答を表示
+                            with st.chat_message("assistant"):
+                                st.write(response)
+                            
+                            # 入力をクリア
+                            st.session_state.recognized_text = ""
+                            st.session_state.user_input_text = ""
+                            
+                            # ページを更新して最新の会話を表示
+                            st.rerun()
+                        
+                        else:
+                            st.error(response)
+                    
+                    except Exception as e:
+                        st.error(f"❌ AI応答生成エラー: {str(e)}")
+            else:
+                st.warning("⚠️ 入力が空です。何か入力してください。")
+    
+    with tab2:
+        # 拡張機能実行エリア
+        st.header("🛠️ 拡張機能実行エリア")
+        
+        # VRMアバターのリアクション（ステート連動）
+        if st.session_state.generated_files:
+            # タブ切り替え時の初回アクセスチェック
+            if "tab2_accessed" not in st.session_state:
+                st.session_state.tab2_accessed = True
+                st.info("🤖 **VRMアバター**: そのツール、僕が作った自信作だよ！使い心地はどう？")
+        
+        st.info("👋 ここで生成されたアプリケーションを実行できます。サイドバーからスキルを選択してください。")
+        
+        # 実行結果表示エリア
+        if "app_execution_result" not in st.session_state:
+            st.session_state.app_execution_result = None
+        
+        if st.session_state.app_execution_result:
+            with st.expander("🚀 実行結果", expanded=True):
+                st.markdown(st.session_state.app_execution_result)
+                
+                # VRMアバターのフィードバック
+                if "実行結果" in st.session_state.app_execution_result and "✅" in st.session_state.app_execution_result:
+                    st.success("🤖 **VRMアバター**: 見事な実行結果だね！このツール、君の役に立ってるといいな！")
+    
+    with tab3:
+        # 進捗管理エリア
+        st.header("📊 進捗管理")
+        st.info("📈 AIの進化状況や生成されたスキルの統計情報を表示します。")
+        
+        # 進捗統計
+        if st.session_state.generated_files:
+            st.subheader("🛠️ 生成スキル統計")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("総スキル数", len(st.session_state.generated_files))
+            
+            with col2:
+                python_files = [f for f in st.session_state.generated_files if f.endswith('.py')]
+                st.metric("Pythonアプリ", len(python_files))
+            
+            with col3:
+                other_files = [f for f in st.session_state.generated_files if not f.endswith('.py')]
+                st.metric("その他ファイル", len(other_files))
+            
+            # スキルリスト
+            st.subheader("📋 生成されたスキル")
+            for i, filename in enumerate(st.session_state.generated_files, 1):
+                st.write(f"{i}. 📄 {filename}")
+        else:
+            st.info("📝 まだ生成されたスキルがありません。")
+    
     # サイドバー
     with st.sidebar:
         st.header("⚙️ 設定")
@@ -2573,34 +2936,84 @@ def load_generated_app_module(filename):
                 # ファイル名から表示名を生成（.pyを除き、アンダースコアをスペースに）
                 display_name = filename.replace('.py', '').replace('_', ' ').title()
                 
-                if st.button(f"⚡ {display_name}", key=f"app_{filename}"):
-                    # アプリを動的にインポートして実行
-                    module, message = load_generated_app_module(filename)
-                    
-                    if module:
-                        st.success(f"✅ {display_name} を読み込みました")
+                col1, col2, col3 = st.columns([2, 1, 1])
+                
+                with col1:
+                    if st.button(f"⚡ {display_name}", key=f"app_{filename}"):
+                        # 拡張機能タブに切り替え
+                        st.session_state.active_tab = "🛠️ 拡張機能"
                         
-                        # モジュール内の関数を検索して実行
-                        if hasattr(module, 'main'):
-                            try:
-                                with st.expander(f"🚀 {display_name} の実行結果", expanded=True):
-                                    module.main()
-                            except Exception as e:
-                                st.error(f"❌ 実行エラー: {str(e)}")
-                        elif hasattr(module, 'run'):
-                            try:
-                                with st.expander(f"🚀 {display_name} の実行結果", expanded=True):
-                                    module.run()
-                            except Exception as e:
-                                st.error(f"❌ 実行エラー: {str(e)}")
+                        # アプリを動的にインポートして実行
+                        module, message = load_generated_app_module(filename)
+                        
+                        if module:
+                            st.session_state.app_execution_result = f"✅ **{display_name} を読み込みました**\n\n"
+                            
+                            # モジュール内の関数を検索して実行
+                            if hasattr(module, 'main'):
+                                try:
+                                    import io
+                                    import sys
+                                    from contextlib import redirect_stdout, redirect_stderr
+                                    
+                                    # 標準出力をキャプチャ
+                                    f = io.StringIO()
+                                    with redirect_stdout(f), redirect_stderr(f):
+                                        module.main()
+                                    
+                                    output = f.getvalue()
+                                    st.session_state.app_execution_result += f"**実行結果**:\n```\n{output}\n```"
+                                    
+                                except Exception as e:
+                                    st.session_state.app_execution_result += f"❌ **実行エラー**: {str(e)}"
+                                    
+                            elif hasattr(module, 'run'):
+                                try:
+                                    import io
+                                    import sys
+                                    from contextlib import redirect_stdout, redirect_stderr
+                                    
+                                    # 標準出力をキャプチャ
+                                    f = io.StringIO()
+                                    with redirect_stdout(f), redirect_stderr(f):
+                                        module.run()
+                                    
+                                    output = f.getvalue()
+                                    st.session_state.app_execution_result += f"**実行結果**:\n```\n{output}\n```"
+                                    
+                                except Exception as e:
+                                    st.session_state.app_execution_result += f"❌ **実行エラー**: {str(e)}"
+                            else:
+                                st.session_state.app_execution_result += f"ℹ️ {display_name} には実行可能な関数が見つかりませんでした\n\n"
+                                # 利用可能な関数を表示
+                                functions = [attr for attr in dir(module) if callable(getattr(module, attr)) and not attr.startswith('_')]
+                                if functions:
+                                    st.session_state.app_execution_result += f"**利用可能な関数**: {', '.join(functions)}"
                         else:
-                            st.info(f"ℹ️ {display_name} には実行可能な関数が見つかりませんでした")
-                            # 利用可能な関数を表示
-                            functions = [attr for attr in dir(module) if callable(getattr(module, attr)) and not attr.startswith('_')]
-                            if functions:
-                                st.write(f"利用可能な関数: {', '.join(functions)}")
-                    else:
-                        st.error(f"❌ {display_name} の読み込みに失敗しました: {message}")
+                            st.session_state.app_execution_result = f"❌ **{display_name} の読み込みに失敗しました**: {message}"
+                        
+                        st.rerun()
+                
+                with col2:
+                    if st.button("📄", key=f"view_{filename}", help="ファイル内容を表示"):
+                        try:
+                            file_path = os.path.join("generated_apps", filename)
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                            st.session_state.app_execution_result = f"📄 **{display_name} のソースコード**:\n\n```python\n{content}\n```"
+                            st.session_state.active_tab = "🛠️ 拡張機能"
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"ファイル読み込みエラー: {e}")
+                
+                with col3:
+                    if st.button("🗑️", key=f"delete_{filename}", help="削除"):
+                        success, message = delete_generated_file(filename)
+                        if success:
+                            st.success(message)
+                            st.rerun()
+                        else:
+                            st.error(message)
         else:
             st.info("📝 生成済みのアプリがありません。AIに「〇〇というアプリを作って」と依頼してください。")
         
