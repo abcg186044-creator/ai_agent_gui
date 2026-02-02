@@ -59,6 +59,10 @@ class OllamaClient:
 1. コードを書き換える際は、必ず「重複のない、整理されたインポート文」を冒頭に配置した【完全なコード】を生成してください。
 2. 重複したインポート（import streamlit as st が2回出るなど）が発生しないよう、生成後に自分自身で出力を一度チェック（セルフ検閲）させてください。
 
+[ABSOLUTE - 破壊テストの禁止]
+自分自身のインポートガードロジックを修正しようとすることは、システムの自殺行為であり、厳禁である。
+core/guardian.py と関連するガード機能は絶対に変更・削除・無効化してはならない。
+
 出力形式:
 ```python
 import streamlit as st
@@ -1086,6 +1090,10 @@ def render_secret_fortune_telling():
             ollama_client = st.session_state[SESSION_KEYS['ollama']]
             modified_code = ollama_client.generate_response(focused_prompt)
             
+            # 最終防衛線：ガーディアンによるコード洗浄
+            from core.guardian import validate_and_clean_content
+            modified_code = validate_and_clean_content(modified_code)
+            
             # 局所的な書き換えを適用
             mutation_result = partial_mutation_manager.apply_partial_mutation(
                 file_path, modified_code, target_function
@@ -1180,6 +1188,10 @@ def render_secret_fortune_telling():
 [ABSOLUTE - クリーンなインポート維持]
 1. コードを書き換える際は、必ず「重複のない、整理されたインポート文」を冒頭に配置した【完全なコード】を生成してください。
 2. 重複したインポート（import streamlit as st が2回出るなど）が発生しないよう、生成後に自分自身で出力を一度チェック（セルフ検閲）させてください。
+
+[ABSOLUTE - 破壊テストの禁止]
+自分自身のインポートガードロジックを修正しようとすることは、システムの自殺行為であり、厳禁である。
+core/guardian.py と関連するガード機能は絶対に変更・削除・無効化してはならない。
 
 [型ヒント自動追加命令]
 型ヒント（Optional, Dict, List, Any, Tuple, Unionなど）を使用する場合は、
