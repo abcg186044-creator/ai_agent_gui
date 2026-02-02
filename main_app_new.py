@@ -116,6 +116,17 @@ def main():
         # Streamlit設定
         st.set_page_config(layout="wide", initial_sidebar_state="expanded")
         
+        # --- 物理的ガードレール開始 ---
+        if 'workspace_state' not in st.session_state:
+            from services.state_manager import load_workspace_state
+            st.session_state['workspace_state'] = load_workspace_state()
+
+        # 必須キーが欠けている場合、ここで強制的に作成する
+        for k in ['todo_list', 'memos', 'agent_name', 'evolution_rules']:
+            if k not in st.session_state['workspace_state']:
+                st.session_state['workspace_state'][k] = [] if k != 'agent_name' else "AIエージェント"
+        # --- 物理的ガードレール終了 ---
+        
         # 超優先初期化：どんな状態からでも復旧する
         if 'workspace_state' not in st.session_state or not isinstance(st.session_state['workspace_state'], dict):
             from services.state_manager import load_workspace_state
