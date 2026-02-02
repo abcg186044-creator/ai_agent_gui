@@ -84,6 +84,8 @@ def disable_gliding_mode():
         vrm_controller.set_expression("neutral")
     
     return True
+
+def get_line_chat_css():
     """LINE風チャットのCSSを取得"""
     return f"""
     <style>
