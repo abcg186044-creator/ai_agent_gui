@@ -184,38 +184,66 @@ def save_workspace_state():
         return False
 
 def load_workspace_state() -> Dict[str, Any]:
-    """ワークスペース状態を読み込み"""
+    """ワークスペース状態を読み込み（進化ルール統合版）"""
     try:
         workspace_file = DATA_DIR / "workspace_state.json"
         
+        # 基本ワークスペースデータを読み込み
         if workspace_file.exists():
             with open(workspace_file, 'r', encoding='utf-8') as f:
                 workspace_data = json.load(f)
-            
-            # 必要なキーが存在することを保証
-            if not isinstance(workspace_data, dict):
-                return get_default_workspace_state()
-            
-            # デフォルト構造とマージして保証
-            merged_data = merge_with_default_workspace_state(workspace_data)
-            
-            # セッション状態に復元
-            st.session_state[SESSION_KEYS['todo_list']] = merged_data.get('todo_list', [])
-            st.session_state[SESSION_KEYS['quick_memos']] = merged_data.get('quick_memos', [])
-            
-            print("✅ ワークスペース状態を読み込みました")
-            return merged_data
-        
         else:
-            # ファイルが存在しない場合はデフォルト構造を返す
-            default_data = get_default_workspace_state()
-            
-            # セッション状態に初期値を設定
-            st.session_state[SESSION_KEYS['todo_list']] = default_data.get('todo_list', [])
-            st.session_state[SESSION_KEYS['quick_memos']] = default_data.get('quick_memos', [])
-            
-            print("✅ デフォルトワークスペース状態を生成しました")
-            return default_data
+            workspace_data = {}
+        
+        # 必要なキーが存在することを保証
+        if not isinstance(workspace_data, dict):
+            workspace_data = {}
+        
+        # personalities_custom.jsonから進化ルールを読み込み
+        personalities_file = DATA_DIR / "personalities_custom.json"
+        evolution_rules = []
+        
+        if personalities_file.exists():
+            try:
+                with open(personalities_file, 'r', encoding='utf-8') as f:
+                    personalities_data = json.load(f)
+                
+                # 進化ルールを抽出（性格設定と進化ルールを一元管理）
+                if isinstance(personalities_data, dict):
+                    # personalitiesから進化ルールを抽出
+                    if "personalities" in personalities_data:
+                        for personality_name, personality_data in personalities_data["personalities"].items():
+                            if isinstance(personality_data, dict) and "evolution_rules" in personality_data:
+                                for rule in personality_data["evolution_rules"]:
+                                    if isinstance(rule, dict):
+                                        rule["source_personality"] = personality_name
+                                        evolution_rules.append(rule)
+                    
+                    # 直接のevolution_rulesも読み込み
+                    if "evolution_rules" in personalities_data:
+                        for rule in personalities_data["evolution_rules"]:
+                            if isinstance(rule, dict):
+                                rule["source"] = "global"
+                                evolution_rules.append(rule)
+                
+                print(f"✅ personalities_custom.jsonから{len(evolution_rules)}件の進化ルールを読み込みました")
+                
+            except Exception as e:
+                print(f"⚠️ personalities_custom.json読み込みエラー: {e}")
+        
+        # デフォルト構造とマージ
+        default_data = get_default_workspace_state()
+        merged_data = merge_with_default_workspace_state(workspace_data)
+        
+        # 進化ルールを統合
+        merged_data["evolution_rules"] = evolution_rules
+        
+        # セッション状態に復元
+        st.session_state[SESSION_KEYS['todo_list']] = merged_data.get('todo_list', [])
+        st.session_state[SESSION_KEYS['quick_memos']] = merged_data.get('quick_memos', [])
+        
+        print("✅ ワークスペース状態と進化ルールを読み込みました")
+        return merged_data
         
     except Exception as e:
         print(f"❌ ワークスペース状態読み込みエラー: {e}")

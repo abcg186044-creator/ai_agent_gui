@@ -25,6 +25,19 @@ from services.backup_manager import backup_manager
 from core.file_map import resolve_target_file, get_relevant_files
 from core.self_optimizer import evolution_logger
 
+# 安全なアクセッサ：KeyErrorを完全に防止
+def get_safe_state(key, default_val=None):
+    """workspace_stateへの安全なアクセスを提供"""
+    if 'workspace_state' not in st.session_state:
+        st.session_state['workspace_state'] = load_workspace_state()
+    return st.session_state['workspace_state'].get(key, default_val)
+
+def set_safe_state(key, value):
+    """workspace_stateへの安全な設定を提供"""
+    if 'workspace_state' not in st.session_state:
+        st.session_state['workspace_state'] = load_workspace_state()
+    st.session_state['workspace_state'][key] = value
+
 def initialize_session_state():
     """セッション状態を初期化"""
     # 基本設定
