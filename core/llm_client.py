@@ -14,7 +14,7 @@ from core.self_mutation import ModularSelfMutationManager
 from core.file_map import resolve_target_file, get_relevant_files
 
 class OllamaClient:
-    def __init__(self, model_name="llama2", base_url="http://localhost:11434"):
+    def __init__(self, model_name="llama3.2:3b", base_url="http://localhost:11434"):
         self.model_name = model_name
         self.base_url = base_url
         self.conversation_history = []
