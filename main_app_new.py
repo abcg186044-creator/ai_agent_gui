@@ -314,7 +314,14 @@ def process_user_message(user_input):
             
             # 自己改造要求をチェック
             evolution_agent = st.session_state.evolution_agent
-            if any(keyword in user_input for keyword in ["変えて", "変更", "改造", "進化", "書き換えて"]):
+            evolution_keywords = ["変えて", "変更", "改造", "進化", "書き換えて", "自己進化", "自己改造", "進化命令"]
+            
+            # デバッグ情報を表示
+            found_keywords = [kw for kw in evolution_keywords if kw in user_input]
+            if found_keywords:
+                st.info(f"🔍 自己進化キーワードを検出: {found_keywords}")
+            
+            if found_keywords:
                 # 局所的自己改造を実行
                 mutation_result = evolution_agent.apply_self_mutation(user_input)
                 
