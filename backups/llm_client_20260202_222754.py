@@ -34,8 +34,7 @@ class OllamaClient:
                     "model": self.model_name,
                     "prompt": full_prompt,
                     "stream": False
-                },
-                timeout=240
+                }
             )
             
             if response.status_code == 200:
