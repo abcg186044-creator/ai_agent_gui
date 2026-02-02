@@ -99,6 +99,17 @@ class SelfEvolvingAgent:
         self.mutation_manager = ModularSelfMutationManager()
         self.load_evolution_rules()
     
+    def load_evolution_rules(self):
+        """進化ルールを読み込む"""
+        try:
+            from services.state_manager import load_workspace_state
+            workspace_state = load_workspace_state()
+            self.evolution_rules = workspace_state.get('evolution_rules', [])
+            print(f"✅ {len(self.evolution_rules)}件の進化ルールを読み込みました")
+        except Exception as e:
+            print(f"⚠️ 進化ルール読み込みエラー: {e}")
+            self.evolution_rules = []
+    
     def apply_self_mutation(self, user_request: str) -> Dict:
         """特定ファイルを狙い撃ちする局所的自己改造を実行"""
         try:
