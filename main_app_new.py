@@ -127,6 +127,10 @@ def main():
                 st.session_state['workspace_state'][k] = [] if k != 'agent_name' else "AIエージェント"
         # --- 物理的ガードレール終了 ---
         
+        # agent_nameをworkspace_stateからst.session_stateに同期
+        if 'agent_name' not in st.session_state:
+            st.session_state['agent_name'] = st.session_state['workspace_state'].get('agent_name', AGENT_NAME)
+        
         # 超優先初期化：どんな状態からでも復旧する
         if 'workspace_state' not in st.session_state or not isinstance(st.session_state['workspace_state'], dict):
             from services.state_manager import load_workspace_state
