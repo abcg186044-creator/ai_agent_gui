@@ -351,6 +351,59 @@ class MultiLanguageCodeGenerator:
             'css': {'extension': '.css', 'template': self._get_css_template},
         }
     
+    def _get_python_template(self, instruction):
+        """Pythonコードテンプレートを生成"""
+        return f'''"""
+生成されたPythonアプリケーション
+指示: {instruction}
+"""
+
+import streamlit as st
+
+def main():
+    """メイン関数"""
+    st.title("生成されたアプリケーション")
+    
+    # ここにコードを実装
+    
+    if __name__ == "__main__":
+        main()
+'''
+    
+    def _get_js_template(self, instruction):
+        """JavaScriptコードテンプレートを生成"""
+        return f'''/*
+生成されたJavaScriptアプリケーション
+指示: {instruction}
+*/
+
+// ここにコードを実装
+'''
+    
+    def _get_html_template(self, instruction):
+        """HTMLコードテンプレートを生成"""
+        return f'''<!DOCTYPE html>
+<html>
+<head>
+    <title>生成されたアプリケーション</title>
+</head>
+<body>
+    <h1>生成されたアプリケーション</h1>
+    <p>指示: {instruction}</p>
+</body>
+</html>
+'''
+    
+    def _get_css_template(self, instruction):
+        """CSSコードテンプレートを生成"""
+        return f'''/*
+生成されたCSS
+指示: {instruction}
+*/
+
+/* ここにCSSを実装 */
+'''
+    
     def generate_code_from_instruction(self, instruction, filename="generated_app"):
         """指示からコードを生成"""
         try:
