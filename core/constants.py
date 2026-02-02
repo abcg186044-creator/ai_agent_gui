@@ -47,5 +47,10 @@ SESSION_KEYS = {
     "todo_list": "todo_list",
     "quick_memos": "quick_memos",
     "active_app": "active_app",
-    "show_app_inline": "show_app_inline"
+    "show_app_inline": "show_app_inline",
+    "workspace_state": "workspace_state",
+    "agent_diary": "agent_diary"
 }
+
+# エージェント名
+AGENT_NAME = "AIエージェント"
