@@ -271,7 +271,7 @@ def render_conversation_tab():
         vrm_controller = st.session_state[SESSION_KEYS['vrm_controller']]
         if vrm_controller.vrm_visible:
             vrm_html = vrm_controller.get_vrm_html()
-            st.components.v1.html(vrm_html, height=400, key=f"vrm_avatar_{hash(vrm_html)}")
+            st.components.v1.html(vrm_html, height=400)
         
         # VRM制御
         render_vrm_controls(vrm_controller)
