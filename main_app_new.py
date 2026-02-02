@@ -105,7 +105,7 @@ def main():
         
         # 超優先初期化：UI描画前に必ずデータをセット
         if 'workspace_state' not in st.session_state:
-            from core.state_manager import load_workspace_state
+            from services.state_manager import load_workspace_state
             st.session_state['workspace_state'] = load_workspace_state()
 
         # 構造の強制的な整合性チェック
