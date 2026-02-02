@@ -113,7 +113,7 @@ class SelfEvolvingAgent:
     def apply_self_mutation(self, user_request: str) -> Dict:
         """特定ファイルを狙い撃ちする局所的自己改造を実行"""
         try:
-            from services.state_manager import resolve_target_file
+            from core.file_map import resolve_target_file
             from services.app_generator import partial_mutation_manager
             from services.backup_manager import backup_manager
             from services.import_sync import import_synchronizer, module_validator

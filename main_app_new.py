@@ -299,8 +299,8 @@ def render_chat_interface():
     if st.button("📤 送信", key="send_message"):
         if user_input.strip():
             process_user_message(user_input.strip())
-            # メッセージ送信後に入力欄をクリア
-            st.session_state.user_message = ""
+            # メッセージ送信後に入力欄をクリア（st.rerun()で対応）
+            st.rerun()
 
 def process_user_message(user_input):
     """ユーザーメッセージを処理"""
