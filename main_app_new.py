@@ -322,6 +322,10 @@ def process_user_message(user_input):
                 st.info(f"🔍 自己進化キーワードを検出: {found_keywords}")
             
             if found_keywords:
+                # 複雑な自己進化命令の警告
+                if len(user_input) > 100:
+                    st.warning("⚠️ 長い自己進化命令はシステムに負荷をかける可能性があります。よりシンプルな命令をお勧めします。")
+                
                 # 局所的自己改造を実行
                 with st.spinner("🤖 自己進化を実行中..."):
                     progress = st.progress(0)
@@ -331,6 +335,11 @@ def process_user_message(user_input):
                         # ステップ1: ターゲットファイル特定
                         status_text.text("🎯 ターゲットファイルを特定中...")
                         progress.progress(20)
+                        
+                        # 安全チェック：複雑すぎる場合は中止
+                        if len(user_input) > 200:
+                            raise Exception("自己進化命令が複雑すぎます。よりシンプルな命令に分割してください。")
+                        
                         mutation_result = evolution_agent.apply_self_mutation(user_input)
                         
                         if mutation_result["success"]:

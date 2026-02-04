@@ -14,7 +14,7 @@ from core.self_mutation import ModularSelfMutationManager
 from core.file_map import resolve_target_file, get_relevant_files
 
 class OllamaClient:
-    def __init__(self, model_name="llama3.2:3b", base_url="http://localhost:11434"):
+    def __init__(self, model_name="llama3.1:8b", base_url="http://localhost:11434"):
         self.model_name = model_name
         self.base_url = base_url
         self.conversation_history = []
@@ -32,8 +32,8 @@ class OllamaClient:
             full_prompt = self._build_prompt(prompt, context)
             
             # プロンプト長さを制限してメモリ使用量を削減
-            if len(full_prompt) > 5000:  # 10,000から5,000に削減
-                full_prompt = full_prompt[:5000] + "...[truncated]"
+            if len(full_prompt) > 10000:
+                full_prompt = full_prompt[:10000] + "...[truncated]"
             
             # Ollama API呼び出し
             response = requests.post(
@@ -45,10 +45,10 @@ class OllamaClient:
                     "options": {
                         "temperature": 0.7,
                         "top_p": 0.9,
-                        "max_tokens": 1000  # 2,000から1,000に削減
+                        "max_tokens": 2000  # トークン数を制限
                     }
                 },
-                timeout=120  # 240秒から120秒に短縮
+                timeout=240
             )
             
             if response.status_code == 200:
