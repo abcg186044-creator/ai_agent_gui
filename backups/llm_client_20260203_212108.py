@@ -14,26 +14,18 @@ from core.self_mutation import ModularSelfMutationManager
 from core.file_map import resolve_target_file, get_relevant_files
 
 class OllamaClient:
-    def __init__(self, model_name="llama3.1:8b", base_url="http://localhost:11434"):
+    def __init__(self, model_name="llama3.2:3b", base_url="http://localhost:11434"):
         self.model_name = model_name
         self.base_url = base_url
         self.conversation_history = []
     
     def generate_response(self, prompt, context=None):
-        """Ollamaで応答生成（メモリ最適化版）"""
+        """Ollamaで応答生成"""
         try:
             import requests
-            import gc
-            
-            # メモリ解放
-            gc.collect()
             
             # コンテキストを構築
             full_prompt = self._build_prompt(prompt, context)
-            
-            # プロンプト長さを制限してメモリ使用量を削減
-            if len(full_prompt) > 10000:
-                full_prompt = full_prompt[:10000] + "...[truncated]"
             
             # Ollama API呼び出し
             response = requests.post(
@@ -41,25 +33,14 @@ class OllamaClient:
                 json={
                     "model": self.model_name,
                     "prompt": full_prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.7,
-                        "top_p": 0.9,
-                        "max_tokens": 2000  # トークン数を制限
-                    }
+                    "stream": False
                 },
                 timeout=240
             )
             
             if response.status_code == 200:
                 result = response.json()
-                response_text = result.get("response", "")
-                
-                # 応答後のメモリ解放
-                del response
-                gc.collect()
-                
-                return response_text
+                return result.get("response", "")
             else:
                 return f"APIエラー: {response.status_code}"
                 
@@ -131,7 +112,7 @@ class SelfEvolvingAgent:
             self.evolution_rules = []
     
     def apply_self_mutation(self, user_request: str) -> Dict:
-        """特定ファイルを狙い撃ちする局所的自己改造を実行（強化版）"""
+        """特定ファイルを狙い撃ちする局所的自己改造を実行"""
         try:
             from core.file_map import resolve_target_file
             from services.app_generator import partial_mutation_manager
@@ -174,95 +155,56 @@ class SelfEvolvingAgent:
                 st.session_state[SESSION_KEYS['ollama']] = OllamaClient()
             
             ollama_client = st.session_state[SESSION_KEYS['ollama']]
+            modified_code = ollama_client.generate_response(focused_prompt)
             
-            # エラーハンドリング付きでLLM応答を取得
-            try:
-                modified_code = ollama_client.generate_response(focused_prompt)
+            # インポート自動チェックと補完
+            enhanced_code = self._auto_complete_imports(target_file, modified_code)
+            
+            # 最優先システム命令：typingインポートのバリデーションと自動補完
+            validated_code = self._validate_and_complete_typing_imports(target_file, enhanced_code)
+            
+            # 特定ファイルのみを上書き保存
+            mutation_result = partial_mutation_manager.apply_partial_mutation(
+                target_file, validated_code, target_function
+            )
+            
+            if mutation_result["success"]:
+                # 命名プロトコルのチェック
+                name_change_result = self._check_and_apply_naming_protocol(user_request, enhanced_code)
                 
-                if not modified_code or "APIエラー" in modified_code or "LLM接続エラー" in modified_code:
-                    return {
-                        "success": False,
-                        "error": f"LLM応答生成に失敗しました: {modified_code}",
-                        "suggestion": "ネットワーク接続を確認し、再度お試しください"
-                    }
+                # インポート同期を実行
+                sync_result = import_synchronizer.sync_imports_after_mutation(target_file)
                 
-            except Exception as llm_error:
-                return {
-                    "success": False,
-                    "error": f"LLM処理中にエラーが発生しました: {str(llm_error)}",
-                    "suggestion": "よりシンプルな命令を試してください"
+                # モジュールバリデーションを実行
+                validation_result = module_validator.validate_all_modules()
+                
+                result = {
+                    "success": True,
+                    "target_file": target_file,
+                    "backup_path": backup_path,
+                    "target_function": target_function,
+                    "sync_result": sync_result,
+                    "validation_result": validation_result,
+                    "auto_imports_added": self._get_added_imports(modified_code, enhanced_code),
+                    "message": f"{target_file} のみを正常に修正しました"
                 }
-            
-            # ガーディアンによる検証とクリーンアップ
-            from .guardian import validate_and_clean_content
-            cleaned_code = validate_and_clean_content(modified_code)
-            
-            # 部分的な適用を実行
-            try:
-                apply_result = partial_mutation_manager.apply_partial_mutation(
-                    target_file, cleaned_code, target_function
-                )
                 
-                if not apply_result["success"]:
-                    return {
-                        "success": False,
-                        "error": f"コード適用に失敗しました: {apply_result['error']}",
-                        "backup_path": backup_path
-                    }
+                # 名前変更があった場合は結果に追加
+                if name_change_result["name_changed"]:
+                    result.update(name_change_result)
+                    # セッション状態を更新して再起動
+                    st.session_state['agent_name'] = name_change_result['new_name']
+                    result["message"] += f"\\n🎯 エージェント名を「{name_change_result['new_name']}」に変更しました"
                 
-            except Exception as apply_error:
+                return result
+            else:
                 return {
                     "success": False,
-                    "error": f"コード適用中にエラーが発生しました: {str(apply_error)}",
+                    "error": mutation_result["error"],
+                    "target_file": target_file,
                     "backup_path": backup_path
                 }
-            
-            # インポート同期を実行
-            sync_result = None
-            try:
-                sync_result = import_synchronizer.sync_imports(target_file)
-            except Exception as sync_error:
-                print(f"⚠️ インポート同期エラー: {sync_error}")
-                sync_result = {"success": False, "errors": [str(sync_error)]}
-            
-            # モジュールバリデーションを実行
-            validation_result = None
-            try:
-                validation_result = module_validator.validate_module(target_file)
-            except Exception as validation_error:
-                print(f"⚠️ バリデーションエラー: {validation_error}")
-                validation_result = {"success": False, "errors": [str(validation_error)]}
-            
-            # 進化ログに記録
-            try:
-                evolution_logger.log_mutation(
-                    target_file=target_file,
-                    user_request=user_request,
-                    success=True,
-                    backup_path=backup_path
-                )
-            except Exception as log_error:
-                print(f"⚠️ 進化ログ記録エラー: {log_error}")
-            
-            # 成功結果を返す
-            result = {
-                "success": True,
-                "target_file": target_file,
-                "backup_path": backup_path,
-                "applied_changes": apply_result.get("applied_changes", []),
-                "modified_code": cleaned_code
-            }
-            
-            # 同期結果があれば追加
-            if sync_result:
-                result["sync_result"] = sync_result
-            
-            # バリデーション結果があれば追加
-            if validation_result:
-                result["validation_result"] = validation_result
-            
-            return result
-            
+                
         except Exception as e:
             return {
                 "success": False,

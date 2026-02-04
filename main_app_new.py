@@ -323,53 +323,64 @@ def process_user_message(user_input):
             
             if found_keywords:
                 # 局所的自己改造を実行
-                mutation_result = evolution_agent.apply_self_mutation(user_input)
-                
-                if mutation_result["success"]:
-                    st.success(f"🎯 局所的自己改造完了！")
-                    st.info(f"📝 {mutation_result['target_file']} のみを修正しました")
-                    st.info(f"💾 バックアップ: {mutation_result['backup_path']}")
+                with st.spinner("🤖 自己進化を実行中..."):
+                    progress = st.progress(0)
+                    status_text = st.empty()
                     
-                    # インポート同期結果を表示
-                    if "sync_result" in mutation_result:
-                        sync_result = mutation_result["sync_result"]
-                        if sync_result.get("modified_files"):
-                            st.info(f"🔄 {len(sync_result['modified_files'])}個のファイルでインポートを同期しました")
-                            for file in sync_result["modified_files"]:
-                                st.caption(f"• {file}")
+                    try:
+                        # ステップ1: ターゲットファイル特定
+                        status_text.text("🎯 ターゲットファイルを特定中...")
+                        progress.progress(20)
+                        mutation_result = evolution_agent.apply_self_mutation(user_input)
                         
-                        if sync_result.get("errors"):
-                            st.warning("⚠️ インポート同期でエラーが発生しました")
-                            for error in sync_result["errors"]:
-                                st.caption(f"• {error}")
-                    
-                    # モジュールバリデーション結果を表示
-                    if "validation_result" in mutation_result:
-                        validation_result = mutation_result["validation_result"]
-                        
-                        if validation_result["success"]:
-                            st.success("✅ すべてのモジュールが正常に検証されました")
+                        if mutation_result["success"]:
+                            # ステップ2: 改造完了
+                            status_text.text("✅ 自己進化完了！")
+                            progress.progress(100)
                             
-                            # バリデーション成功の場合のみ再起動
-                            st.info("🔄 アプリケーションを再起動します...")
-                            st.rerun()
+                            st.success(f"🎯 局所的自己改造完了！")
+                            st.info(f"📝 {mutation_result['target_file']} のみを修正しました")
+                            st.info(f"💾 バックアップ: {mutation_result['backup_path']}")
+                            
+                            # インポート同期結果を表示
+                            if "sync_result" in mutation_result:
+                                sync_result = mutation_result["sync_result"]
+                                if sync_result.get("modified_files"):
+                                    st.info(f"🔄 {len(sync_result['modified_files'])}個のファイルでインポートを同期しました")
+                                    for file in sync_result["modified_files"]:
+                                        st.caption(f"• {file}")
+                                
+                                if sync_result.get("errors"):
+                                    st.warning("⚠️ インポート同期でエラーが発生しました")
+                                    for error in sync_result["errors"]:
+                                        st.caption(f"• {error}")
+                            
+                            # モジュールバリデーション結果を表示
+                            if "validation_result" in mutation_result:
+                                validation_result = mutation_result["validation_result"]
+                                
+                                if validation_result["success"]:
+                                    st.success("✅ すべてのモジュールが正常に検証されました")
+                                    
+                                    # バリデーション成功の場合のみ再起動
+                                    st.info("🔄 アプリケーションを再起動します...")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ モジュール検証でエラーが発生しました")
+                                    for error in validation_result.get("errors", []):
+                                        st.caption(f"• {error}")
                         else:
-                            st.error("❌ モジュール検証でエラーが発生しました")
-                            st.error("再起動を中止します")
-                            
-                            for error in validation_result["errors"]:
-                                st.caption(f"• {error}")
+                            status_text.text("❌ 自己進化失敗")
+                            progress.progress(0)
+                            st.error(f"❌ 自己改造に失敗しました: {mutation_result.get('error', '不明なエラー')}")
+                            if "suggestion" in mutation_result:
+                                st.info(f"💡 提案: {mutation_result['suggestion']}")
                     
-                    # VRMアバターの反応
-                    vrm_controller = st.session_state[SESSION_KEYS['vrm_controller']]
-                    vrm_controller.set_expression("happy")
-                    
-                    return
-                else:
-                    st.error(f"❌ 自己改造に失敗しました: {mutation_result['error']}")
-                    if mutation_result.get("suggestion"):
-                        st.info(f"💡 提案: {mutation_result['suggestion']}")
-                    return
+                    except Exception as e:
+                        status_text.text("❌ 処理エラー")
+                        progress.progress(0)
+                        st.error(f"❌ 自己進化中にエラーが発生しました: {str(e)}")
+                        st.info("💡 アプリケーションを再起動して、よりシンプルな命令を試してください")
             
             # 自己診断要求をチェック
             if any(keyword in user_input for keyword in ["診断", "チェック", "分析", "レビュー"]):
