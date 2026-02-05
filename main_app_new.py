@@ -390,6 +390,9 @@ def process_user_message(user_input):
                                     st.error("❌ モジュール検証でエラーが発生しました")
                                     for error in validation_result.get("errors", []):
                                         st.caption(f"• {error}")
+                            
+                            # 自己進化処理完了後はreturnして通常の応答処理に進まない
+                            return
                         else:
                             status_text.text("❌ 自己進化失敗")
                             progress.progress(0)
