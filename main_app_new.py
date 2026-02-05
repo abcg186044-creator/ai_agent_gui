@@ -294,12 +294,24 @@ def render_chat_interface():
     # ユーザー入力
     st.subheader("💬 メッセージ入力")
     
+    # メッセージ入力欄の初期化
+    if 'user_message' not in st.session_state:
+        st.session_state.user_message = ""
+    
+    # メッセージ送信後のクリア処理
+    def clear_input():
+        st.session_state.user_message = ""
+    
+    # メッセージ入力欄
     user_input = st.text_input("メッセージを入力...", key="user_message")
     
-    if st.button("📤 送信", key="send_message"):
+    # 送信ボタン
+    if st.button("📤 送信", key="send_message", on_click=clear_input):
         if user_input.strip():
+            # メッセージを処理
             process_user_message(user_input.strip())
-            # メッセージ送信後に入力欄をクリア（st.rerun()で対応）
+            
+            # アプリケーションを再実行してUIを更新
             st.rerun()
 
 def process_user_message(user_input):
