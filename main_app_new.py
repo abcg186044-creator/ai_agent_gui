@@ -49,8 +49,7 @@ def initialize_session_state():
         st.session_state[SESSION_KEYS['conversation_history']] = []
     if SESSION_KEYS['todo_list'] not in st.session_state:
         st.session_state[SESSION_KEYS['todo_list']] = []
-    if SESSION_KEYS['workspace_state'] not in st.session_state:
-        st.session_state[SESSION_KEYS['workspace_state']] = {}
+    # workspace_stateは物理的ガードレールで初期化するため、ここでは初期化しない
     if SESSION_KEYS['agent_diary'] not in st.session_state:
         st.session_state[SESSION_KEYS['agent_diary']] = []
     if SESSION_KEYS['vrm_controller'] not in st.session_state:
