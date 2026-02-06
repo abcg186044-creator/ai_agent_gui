@@ -238,21 +238,13 @@ def load_workspace_state() -> Dict[str, Any]:
         # 進化ルールを統合
         merged_data["evolution_rules"] = evolution_rules
         
-        # セッション状態に復元
-        st.session_state[SESSION_KEYS['todo_list']] = merged_data.get('todo_list', [])
-        st.session_state[SESSION_KEYS['quick_memos']] = merged_data.get('quick_memos', [])
-        
+        # セッション状態への復元は呼び出し元で行う
         print("✅ ワークスペース状態と進化ルールを読み込みました")
         return merged_data
         
     except Exception as e:
         print(f"❌ ワークスペース状態読み込みエラー: {e}")
         default_data = get_default_workspace_state()
-        
-        # エラー時にもセッション状態を初期化
-        st.session_state[SESSION_KEYS['todo_list']] = default_data.get('todo_list', [])
-        st.session_state[SESSION_KEYS['quick_memos']] = default_data.get('quick_memos', [])
-        
         return default_data
 
 def get_default_workspace_state() -> Dict[str, Any]:

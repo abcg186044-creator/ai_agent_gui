@@ -131,11 +131,6 @@ def main():
         if 'agent_name' not in st.session_state:
             st.session_state['agent_name'] = st.session_state['workspace_state'].get('agent_name', AGENT_NAME)
         
-        # 超優先初期化：どんな状態からでも復旧する
-        if 'workspace_state' not in st.session_state or not isinstance(st.session_state['workspace_state'], dict):
-            from services.state_manager import load_workspace_state
-            st.session_state['workspace_state'] = load_workspace_state()
-
         # 【重要】必須キーの存在を物理的に保証する
         required_structure = {
             "todo_list": [],
@@ -147,10 +142,6 @@ def main():
         for key, default_value in required_structure.items():
             if key not in st.session_state['workspace_state']:
                 st.session_state['workspace_state'][key] = default_value
-        
-        # 強制初期化：workspace_stateの安全な取得
-        if 'workspace_state' not in st.session_state:
-            st.session_state['workspace_state'] = load_workspace_state()
         
         # セッション状態初期化
         initialize_session_state()
